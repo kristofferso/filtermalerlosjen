@@ -71,7 +71,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [customerName, setCustomerName] = useState("")
   const [error, setError] = useState("")
-  const [confirmation, setConfirmation] = useState("")
+  const [confirmation, setConfirmation] = useState<{ bagCount: number; subtotalKr: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const bagCount = Object.values(quantities).reduce((sum, quantity) => sum + quantity, 0)
@@ -87,7 +87,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
-    setConfirmation("")
+    setConfirmation(null)
     setIsSubmitting(true)
     try {
       await submitOrder({
@@ -97,7 +97,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
           items: openRound.coffees.map((coffee) => ({ roundCoffeeId: coffee.id, quantity: quantities[coffee.id] ?? 0 })),
         },
       })
-      setConfirmation(`${bagCount} bags submitted. Coffee subtotal: ${formatKr(subtotalKr)}. Message Kristoffer if anything needs changing.`)
+      setConfirmation({ bagCount, subtotalKr })
       setQuantities({})
       setCustomerName("")
     } catch (cause) {
@@ -140,21 +140,35 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
         })}
       </section>
 
-      <section className="sticky bottom-4 mt-auto space-y-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-stone-200">
-        <div className="flex items-center justify-between font-medium">
-          <span>{bagCount} bags</span>
-          <span>{formatKr(subtotalKr)}</span>
-        </div>
-        <label className="block space-y-2">
-          <span className="text-sm font-medium">Name</span>
-          <input className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-        </label>
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
-        {confirmation ? <p className="text-sm text-green-700">{confirmation}</p> : null}
-        <button className="w-full rounded-xl bg-stone-950 px-4 py-3 font-medium text-white disabled:opacity-50" disabled={isSubmitting || bagCount === 0 || !customerName.trim()}>
-          {isSubmitting ? "Submitting…" : "Submit order"}
-        </button>
-      </section>
+      {confirmation ? (
+        <section className="sticky bottom-4 mt-auto space-y-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-green-200">
+          <div>
+            <h3 className="text-xl font-semibold text-green-800">Order submitted</h3>
+            <p className="mt-2 text-sm text-stone-700">
+              {confirmation.bagCount} bags · coffee subtotal {formatKr(confirmation.subtotalKr)}. Shipping, if any, is added later.
+            </p>
+            <p className="mt-2 text-sm text-stone-600">Message Kristoffer if anything needs changing.</p>
+          </div>
+          <button className="w-full rounded-xl bg-stone-950 px-4 py-3 font-medium text-white" type="button" onClick={() => setConfirmation(null)}>
+            Order another
+          </button>
+        </section>
+      ) : (
+        <section className="sticky bottom-4 mt-auto space-y-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-stone-200">
+          <div className="flex items-center justify-between font-medium">
+            <span>{bagCount} bags</span>
+            <span>{formatKr(subtotalKr)}</span>
+          </div>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Name</span>
+            <input className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+          </label>
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+          <button className="w-full rounded-xl bg-stone-950 px-4 py-3 font-medium text-white disabled:opacity-50" disabled={isSubmitting || bagCount === 0 || !customerName.trim()}>
+            {isSubmitting ? "Submitting…" : "Submit order"}
+          </button>
+        </section>
+      )}
     </form>
   )
 }
