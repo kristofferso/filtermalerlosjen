@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { formatKr, parseKroner } from "@/lib/money"
-import { calculateRoundTotals } from "@/lib/order-totals"
+import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
 import { unlockAdmin } from "@/server/auth"
 import {
   addCoffee,
@@ -241,6 +241,7 @@ function OpenRoundSection({ round, refresh }: { round: NonNullable<Dashboard["op
       <div className="flex flex-wrap gap-2">
         {round.coffees.map((coffee) => <span key={coffee.id} className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-sm">{coffee.imageUrlSnapshot ? <img className="h-6 w-6 rounded-full object-cover" src={coffee.imageUrlSnapshot} alt="" loading="lazy" /> : null}{coffee.nameSnapshot} · {formatKr(coffee.priceKrSnapshot)}</span>)}
       </div>
+      <BulkCoffeeTotals orders={round.orders} />
       <OrderList orders={round.orders} refresh={refresh} />
       <div className="flex flex-col gap-3 rounded-2xl bg-stone-100 p-4 sm:flex-row sm:items-end">
         <label className="flex-1 space-y-1">
@@ -248,6 +249,30 @@ function OpenRoundSection({ round, refresh }: { round: NonNullable<Dashboard["op
           <input className="w-full rounded-xl border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={shipping} onChange={(event) => setShipping(event.target.value.replace(/\D/g, ""))} />
         </label>
         <button className="rounded-xl bg-stone-950 px-4 py-3 font-medium text-white" type="button" onClick={handleClose}>Close round</button>
+      </div>
+    </section>
+  )
+}
+
+function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
+  const totals = calculateCoffeeTotals(orders)
+  if (totals.length === 0) return null
+
+  return (
+    <section className="rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100">
+      <h3 className="font-semibold">Bulk order</h3>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {totals.map((coffee) => (
+          <div key={coffee.name} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+              {coffee.imageUrl ? <img className="h-9 w-9 shrink-0 rounded-lg object-cover" src={coffee.imageUrl} alt="" loading="lazy" /> : null}
+              <span className="truncate font-medium">{coffee.name}</span>
+            </span>
+            <span className="shrink-0 text-right">
+              <strong>{coffee.quantity}</strong> bags · {formatKr(coffee.totalKr)}
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -306,23 +331,11 @@ function ClosedRoundSummary({ round, refresh }: { round: Dashboard["closedRounds
         <p>Shipping: {formatKr(round.shippingKr)}</p>
       </div>
 
+      <BulkCoffeeTotals orders={round.orders} />
+
       <div className="space-y-3">
         {totals.map((total) => (
-          <article key={total.orderId} className="rounded-2xl border border-stone-200 p-4">
-            <h3 className="font-semibold">{total.customerName}</h3>
-            <ul className="mt-2 space-y-1 text-sm">
-              {total.items.map((item) => <li key={`${total.orderId}-${item.name}`}>{item.quantity} × {item.name}: {formatKr(item.subtotalKr)}</li>)}
-            </ul>
-            <div className="mt-3 grid gap-1 text-sm">
-              <p>Coffee subtotal: {formatKr(total.coffeeSubtotalKr)}</p>
-              <p>Shipping share: {formatKr(total.shippingShareKr)}</p>
-              <p className="font-semibold">Total owed: {formatKr(total.totalKr)}</p>
-            </div>
-            <div className="mt-3 flex gap-4 text-sm">
-              <FlagCheckbox label="Paid" checked={total.paid} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: checked, collected: total.collected } }); await refresh() }} />
-              <FlagCheckbox label="Collected" checked={total.collected} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: total.paid, collected: checked } }); await refresh() }} />
-            </div>
-          </article>
+          <ClosedOrderRow key={total.orderId} total={total} refresh={refresh} />
         ))}
       </div>
 
@@ -336,8 +349,50 @@ function ClosedRoundSummary({ round, refresh }: { round: Dashboard["closedRounds
   )
 }
 
-function FlagCheckbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => Promise<void> }) {
-  return <label className="flex items-center gap-2"><input type="checkbox" checked={checked} onChange={(event) => void onChange(event.target.checked)} /> {label}</label>
+function ClosedOrderRow({ total, refresh }: { total: ReturnType<typeof calculateRoundTotals>[number]; refresh: () => Promise<void> }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <article className="rounded-2xl border border-stone-200 p-4">
+      <button className="flex w-full items-start justify-between gap-3 text-left" type="button" onClick={() => setExpanded((value) => !value)}>
+        <span>
+          <span className="block font-semibold">{total.customerName}</span>
+          <span className="text-sm text-stone-600">{total.items.reduce((sum, item) => sum + item.quantity, 0)} bags · {formatKr(total.totalKr)}</span>
+        </span>
+        <span className="text-sm text-stone-500">{expanded ? "Hide" : "Details"}</span>
+      </button>
+
+      {expanded ? (
+        <div className="mt-3 border-t border-stone-200 pt-3">
+          <ul className="space-y-1 text-sm">
+            {total.items.map((item) => <li key={`${total.orderId}-${item.name}`}>{item.quantity} × {item.name}: {formatKr(item.subtotalKr)}</li>)}
+          </ul>
+          <div className="mt-3 grid gap-1 text-sm">
+            <p>Coffee subtotal: {formatKr(total.coffeeSubtotalKr)}</p>
+            <p>Shipping share: {formatKr(total.shippingShareKr)}</p>
+            <p className="font-semibold">Total owed: {formatKr(total.totalKr)}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-2 text-sm">
+        <FlagButton label="Paid" checked={total.paid} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: checked, collected: total.collected } }); await refresh() }} />
+        <FlagButton label="Collected" checked={total.collected} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: total.paid, collected: checked } }); await refresh() }} />
+      </div>
+    </article>
+  )
+}
+
+function FlagButton({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => Promise<void> }) {
+  return (
+    <button
+      className={`rounded-full px-3 py-1.5 font-medium ${checked ? "bg-green-700 text-white" : "bg-stone-100 text-stone-700"}`}
+      type="button"
+      onClick={() => void onChange(!checked)}
+    >
+      {checked ? "✓ " : ""}{label}
+    </button>
+  )
 }
 
 function formatDate(value: Date | string | null) {
