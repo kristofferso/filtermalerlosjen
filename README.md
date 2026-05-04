@@ -1,21 +1,20 @@
-# TanStack Start + shadcn/ui
+# Kaffekollektivet
 
-This is a template for a new TanStack Start project with React, TypeScript, and shadcn/ui.
+Private coffee ordering app for coordinating wholesale coffee rounds.
 
-## Adding components
-
-To add components to your app, run the following command:
+## Development
 
 ```bash
-npx shadcn@latest add button
+bun install
+cp .env.example .env
+bun run db:migrate
+bun run db:seed
+bun run dev
 ```
 
-This will place the ui components in the `components` directory.
+## Required environment variables
 
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
-```
+- `DATABASE_URL`
+- `CUSTOMER_PASSWORD`
+- `ADMIN_PASSWORD`
+- `SESSION_SECRET`

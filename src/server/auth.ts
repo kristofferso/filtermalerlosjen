@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start"
-import { getCookie, setCookie } from "@tanstack/start-server-core"
 import { z } from "zod"
 import { createSessionToken, requireEnv, verifySessionToken } from "@/lib/auth"
 
@@ -8,6 +7,11 @@ export const ADMIN_COOKIE = "kk_admin_session"
 
 const passwordSchema = z.object({ password: z.string().min(1) })
 
+async function getCookieHelpers() {
+  const importer = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<typeof import("@tanstack/start-server-core")>
+  return importer("@tanstack/start-server-core")
+}
+
 export const unlockCustomer = createServerFn({ method: "POST" })
   .inputValidator((input) => passwordSchema.parse(input))
   .handler(async ({ data }) => {
@@ -15,6 +19,7 @@ export const unlockCustomer = createServerFn({ method: "POST" })
       return { ok: false, error: "Wrong password" }
     }
 
+    const { setCookie } = await getCookieHelpers()
     setCookie(CUSTOMER_COOKIE, await createSessionToken({ purpose: "customer", secret: requireEnv("SESSION_SECRET") }), {
       httpOnly: true,
       sameSite: "lax",
@@ -33,6 +38,7 @@ export const unlockAdmin = createServerFn({ method: "POST" })
       return { ok: false, error: "Wrong password" }
     }
 
+    const { setCookie } = await getCookieHelpers()
     setCookie(ADMIN_COOKIE, await createSessionToken({ purpose: "admin", secret: requireEnv("SESSION_SECRET") }), {
       httpOnly: true,
       sameSite: "lax",
@@ -45,6 +51,7 @@ export const unlockAdmin = createServerFn({ method: "POST" })
   })
 
 export async function isCustomerUnlocked() {
+  const { getCookie } = await getCookieHelpers()
   return verifySessionToken({
     token: getCookie(CUSTOMER_COOKIE),
     purpose: "customer",
@@ -53,6 +60,7 @@ export async function isCustomerUnlocked() {
 }
 
 export async function isAdminUnlocked() {
+  const { getCookie } = await getCookieHelpers()
   return verifySessionToken({
     token: getCookie(ADMIN_COOKIE),
     purpose: "admin",
