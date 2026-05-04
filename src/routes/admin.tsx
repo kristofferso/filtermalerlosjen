@@ -5,6 +5,7 @@ import { calculateRoundTotals } from "@/lib/order-totals"
 import { unlockAdmin } from "@/server/auth"
 import {
   addCoffee,
+  archiveCoffee,
   closeRound,
   deleteOrder,
   getAdminDashboard,
@@ -28,7 +29,8 @@ function AdminPage() {
   const router = useRouter()
 
   return (
-    <main className="mx-auto min-h-svh w-full max-w-4xl space-y-6 bg-stone-50 p-4 text-stone-950 sm:p-6">
+    <main className="min-h-svh bg-gradient-to-br from-stone-100 via-amber-50 to-stone-200 px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-5xl space-y-6">
       <header className="space-y-1 pt-4">
         <p className="text-sm uppercase tracking-[0.2em] text-stone-500">Kaffekollektivet</p>
         <h1 className="text-3xl font-semibold tracking-tight">Order Desk</h1>
@@ -36,6 +38,7 @@ function AdminPage() {
 
       {!data.unlocked ? <AdminPasswordForm onUnlocked={() => router.invalidate()} /> : null}
       {data.unlocked ? <DashboardView dashboard={data} refresh={() => router.invalidate()} /> : null}
+      </div>
     </main>
   )
 }
@@ -149,14 +152,20 @@ function CoffeeRow({ coffee, selected, onToggle, refresh }: { coffee: Coffee; se
   return (
     <div className="p-4">
       <button className="flex w-full items-center justify-between gap-3 text-left" type="button" onClick={onToggle}>
-        <span>
-          <span className="font-medium">{coffee.name}</span>
-          {!coffee.isActive ? <span className="ml-2 rounded bg-stone-200 px-2 py-0.5 text-xs">Inactive</span> : null}
-          <span className="block text-sm text-stone-600">{formatKr(coffee.priceKr)} {coffee.description ? `· ${coffee.description}` : ""}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          {coffee.imageUrl ? <img className="h-14 w-14 shrink-0 rounded-xl object-cover" src={coffee.imageUrl} alt={coffee.name} loading="lazy" /> : null}
+          <span className="min-w-0">
+            <span className="font-medium">{coffee.name}</span>
+            {!coffee.isActive ? <span className="ml-2 rounded bg-stone-200 px-2 py-0.5 text-xs">Inactive</span> : null}
+            <span className="block text-sm text-stone-600">{formatKr(coffee.priceKr)} {coffee.description ? `· ${coffee.description}` : ""}</span>
+          </span>
         </span>
         <span className={`rounded-full px-3 py-1 text-sm ${selected ? "bg-green-700 text-white" : "bg-stone-100"}`}>{selected ? "Selected" : "Add"}</span>
       </button>
-      <button className="mt-2 text-sm underline" type="button" onClick={() => setIsEditing((value) => !value)}>Edit</button>
+      <div className="mt-2 flex gap-4">
+        <button className="text-sm underline" type="button" onClick={() => setIsEditing((value) => !value)}>Edit</button>
+        <button className="text-sm text-red-700 underline" type="button" onClick={async () => { await archiveCoffee({ data: { id: coffee.id } }); await refresh() }}>Delete</button>
+      </div>
       {isEditing ? <EditCoffeeForm coffee={coffee} refresh={refresh} /> : null}
     </div>
   )
@@ -165,22 +174,25 @@ function CoffeeRow({ coffee, selected, onToggle, refresh }: { coffee: Coffee; se
 function AddCoffeeForm({ supplier, defaultPriceKr, onAdded, refresh }: { supplier: Supplier; defaultPriceKr: number; onAdded: (coffee: Coffee) => void; refresh: () => Promise<void> }) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [imageUrl, setImageUrl] = useState("")
   const [price, setPrice] = useState(String(defaultPriceKr))
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const coffee = await addCoffee({ data: { supplierId: supplier.id, name, description, priceKr: parseKroner(price) } })
+    const coffee = await addCoffee({ data: { supplierId: supplier.id, name, description, imageUrl, priceKr: parseKroner(price) } })
     onAdded(coffee)
     setName("")
     setDescription("")
+    setImageUrl("")
     setPrice(String(coffee.priceKr))
     await refresh()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl bg-stone-100 p-4 sm:grid-cols-[1fr_1fr_8rem_auto]">
+    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl bg-stone-100 p-4 sm:grid-cols-[1fr_1fr_1fr_8rem_auto]">
       <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Coffee name" value={name} onChange={(event) => setName(event.target.value)} />
       <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
+      <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Image URL" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
       <input className="rounded-xl border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))} />
       <button className="rounded-xl bg-stone-950 px-4 py-2 font-medium text-white">Add</button>
     </form>
@@ -190,19 +202,21 @@ function AddCoffeeForm({ supplier, defaultPriceKr, onAdded, refresh }: { supplie
 function EditCoffeeForm({ coffee, refresh }: { coffee: Coffee; refresh: () => Promise<void> }) {
   const [name, setName] = useState(coffee.name)
   const [description, setDescription] = useState(coffee.description)
+  const [imageUrl, setImageUrl] = useState(coffee.imageUrl)
   const [price, setPrice] = useState(String(coffee.priceKr))
   const [isActive, setIsActive] = useState(coffee.isActive)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await updateCoffee({ data: { id: coffee.id, supplierId: coffee.supplierId, name, description, priceKr: parseKroner(price), isActive } })
+    await updateCoffee({ data: { id: coffee.id, supplierId: coffee.supplierId, name, description, imageUrl, priceKr: parseKroner(price), isActive } })
     await refresh()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded-xl bg-stone-100 p-3 sm:grid-cols-[1fr_1fr_7rem_auto_auto]">
+    <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded-xl bg-stone-100 p-3 sm:grid-cols-[1fr_1fr_1fr_7rem_auto_auto]">
       <input className="rounded-lg border border-stone-300 px-3 py-2" value={name} onChange={(event) => setName(event.target.value)} />
       <input className="rounded-lg border border-stone-300 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} />
+      <input className="rounded-lg border border-stone-300 px-3 py-2" placeholder="Image URL" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
       <input className="rounded-lg border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))} />
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Active</label>
       <button className="rounded-lg bg-stone-950 px-3 py-2 text-white">Save</button>
@@ -225,7 +239,7 @@ function OpenRoundSection({ round, refresh }: { round: NonNullable<Dashboard["op
         <p className="text-sm text-stone-600">Supplier is locked while this round is open.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {round.coffees.map((coffee) => <span key={coffee.id} className="rounded-full bg-stone-100 px-3 py-1 text-sm">{coffee.nameSnapshot} · {formatKr(coffee.priceKrSnapshot)}</span>)}
+        {round.coffees.map((coffee) => <span key={coffee.id} className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-sm">{coffee.imageUrlSnapshot ? <img className="h-6 w-6 rounded-full object-cover" src={coffee.imageUrlSnapshot} alt="" loading="lazy" /> : null}{coffee.nameSnapshot} · {formatKr(coffee.priceKrSnapshot)}</span>)}
       </div>
       <OrderList orders={round.orders} refresh={refresh} />
       <div className="flex flex-col gap-3 rounded-2xl bg-stone-100 p-4 sm:flex-row sm:items-end">
