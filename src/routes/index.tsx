@@ -14,7 +14,8 @@ function CustomerPage() {
   const router = useRouter()
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col gap-6 bg-stone-50 p-5 text-stone-950">
+    <main className="min-h-svh bg-gradient-to-br from-stone-100 via-amber-50 to-stone-200 px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <header className="space-y-2 pt-4">
         <p className="text-sm uppercase tracking-[0.2em] text-stone-500">Private coffee orders</p>
         <h1 className="text-3xl font-semibold tracking-tight">Kaffekollektivet</h1>
@@ -23,6 +24,7 @@ function CustomerPage() {
       {!data.unlocked ? <PasswordForm onUnlocked={() => router.invalidate()} /> : null}
       {data.unlocked && !data.openRound ? <p className="rounded-2xl bg-white p-5 shadow-sm">No coffee order is open right now.</p> : null}
       {data.unlocked && data.openRound ? <OrderForm openRound={data.openRound} /> : null}
+      </div>
     </main>
   )
 }
@@ -113,16 +115,19 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
         <p className="mt-2 text-sm text-stone-600">Shipping, if any, will be added evenly across everyone who ordered.</p>
       </section>
 
-      <section className="divide-y divide-stone-200 rounded-2xl bg-white shadow-sm">
+      <section className="grid gap-3 sm:grid-cols-2">
         {openRound.coffees.map((coffee) => {
           const quantity = quantities[coffee.id] ?? 0
           return (
-            <div key={coffee.id} className="flex items-center justify-between gap-3 p-4">
-              <div>
-                <h3 className="font-medium">{coffee.name}</h3>
-                <p className="text-sm text-stone-600">{formatKr(coffee.priceKr)}</p>
+            <div key={coffee.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex min-w-0 items-center gap-3">
+                {coffee.imageUrl ? <img className="h-16 w-16 shrink-0 rounded-xl object-cover" src={coffee.imageUrl} alt={coffee.name} loading="lazy" /> : null}
+                <div className="min-w-0">
+                  <h3 className="truncate font-medium">{coffee.name}</h3>
+                  <p className="text-sm text-stone-600">{formatKr(coffee.priceKr)}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
                 <button className="h-10 w-10 rounded-full bg-stone-200 text-xl" type="button" onClick={() => setQuantity(coffee.id, quantity - 1)}>
                   −
                 </button>
