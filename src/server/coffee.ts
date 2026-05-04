@@ -6,10 +6,13 @@ import { coffees, orderItems, orders, roundCoffees, rounds, suppliers } from "@/
 import { assertAdmin, isAdminUnlocked, isCustomerUnlocked } from "./auth"
 
 const uuidSchema = z.string().uuid()
+const imageUrlSchema = z.string().trim().url().or(z.literal("")).optional().default("")
+
 const addCoffeeSchema = z.object({
   supplierId: uuidSchema,
   name: z.string().trim().min(1),
   description: z.string().trim().optional().default(""),
+  imageUrl: imageUrlSchema,
   priceKr: z.number().int().min(1),
 })
 const updateCoffeeSchema = addCoffeeSchema.extend({
@@ -29,6 +32,7 @@ const submitOrderSchema = z.object({
   customerName: z.string().trim().min(1).max(80),
   items: z.array(z.object({ roundCoffeeId: uuidSchema, quantity: z.number().int().min(0).max(50) })),
 })
+const archiveCoffeeSchema = z.object({ id: uuidSchema })
 const deleteOrderSchema = z.object({ orderId: uuidSchema })
 const updateOrderFlagsSchema = z.object({
   orderId: uuidSchema,
@@ -74,7 +78,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
       paid: boolean
       collected: boolean
       createdAt: Date
-      items: Array<{ name: string; quantity: number; priceKr: number }>
+      items: Array<{ name: string; imageUrl: string; quantity: number; priceKr: number }>
     }
   >()
 
@@ -94,6 +98,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
     if (row.item && row.roundCoffee) {
       byOrder.get(row.order.id)?.items.push({
         name: row.roundCoffee.nameSnapshot,
+        imageUrl: row.roundCoffee.imageUrlSnapshot,
         quantity: row.item.quantity,
         priceKr: row.item.priceKrSnapshot,
       })
@@ -124,6 +129,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(asy
       coffees: selectedCoffees.map((coffee) => ({
         id: coffee.id,
         name: coffee.nameSnapshot,
+        imageUrl: coffee.imageUrlSnapshot,
         priceKr: coffee.priceKrSnapshot,
       })),
     },
@@ -135,7 +141,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(async
 
   const [supplierRows, coffeeRows, openRound, closedRoundRows] = await Promise.all([
     db.select().from(suppliers).orderBy(suppliers.name),
-    db.select().from(coffees).orderBy(desc(coffees.createdAt)),
+    db.select().from(coffees).where(eq(coffees.isDeleted, false)).orderBy(desc(coffees.createdAt)),
     getOpenRoundRecord(),
     db.select().from(rounds).where(eq(rounds.status, "closed")).orderBy(desc(rounds.closedAt)).limit(10),
   ])
@@ -191,10 +197,23 @@ export const updateCoffee = createServerFn({ method: "POST" })
         supplierId: data.supplierId,
         name: data.name,
         description: data.description,
+        imageUrl: data.imageUrl,
         priceKr: data.priceKr,
         isActive: data.isActive,
         updatedAt: new Date(),
       })
+      .where(eq(coffees.id, data.id))
+      .returning()
+    return coffee
+  })
+
+export const archiveCoffee = createServerFn({ method: "POST" })
+  .inputValidator((input) => archiveCoffeeSchema.parse(input))
+  .handler(async ({ data }) => {
+    await assertAdmin()
+    const [coffee] = await db
+      .update(coffees)
+      .set({ isDeleted: true, isActive: false, updatedAt: new Date() })
       .where(eq(coffees.id, data.id))
       .returning()
     return coffee
@@ -209,7 +228,14 @@ export const openRound = createServerFn({ method: "POST" })
     const selectedCoffees = await db
       .select()
       .from(coffees)
-      .where(and(eq(coffees.supplierId, data.supplierId), inArray(coffees.id, data.coffeeIds), eq(coffees.isActive, true)))
+      .where(
+        and(
+          eq(coffees.supplierId, data.supplierId),
+          inArray(coffees.id, data.coffeeIds),
+          eq(coffees.isActive, true),
+          eq(coffees.isDeleted, false),
+        ),
+      )
 
     if (selectedCoffees.length !== data.coffeeIds.length) {
       throw new Error("All selected coffees must be active and belong to the supplier")
@@ -225,6 +251,7 @@ export const openRound = createServerFn({ method: "POST" })
         roundId: round.id,
         coffeeId: coffee.id,
         nameSnapshot: coffee.name,
+        imageUrlSnapshot: coffee.imageUrl,
         priceKrSnapshot: coffee.priceKr,
       })),
     )
