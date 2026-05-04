@@ -31,8 +31,10 @@ export const coffees = pgTable(
     supplierId: uuid("supplier_id").notNull().references(() => suppliers.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
+    imageUrl: text("image_url").notNull().default(""),
     priceKr: integer("price_kr").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    isDeleted: boolean("is_deleted").notNull().default(false),
     ...timestamps,
   },
   (table) => ({
@@ -66,6 +68,7 @@ export const roundCoffees = pgTable(
     roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: "cascade" }),
     coffeeId: uuid("coffee_id").notNull().references(() => coffees.id, { onDelete: "restrict" }),
     nameSnapshot: text("name_snapshot").notNull(),
+    imageUrlSnapshot: text("image_url_snapshot").notNull().default(""),
     priceKrSnapshot: integer("price_kr_snapshot").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
