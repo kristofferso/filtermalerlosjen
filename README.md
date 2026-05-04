@@ -1,4 +1,4 @@
-# Kaffekollektivet
+# Filtermalerlosjen
 
 Private coffee ordering app for coordinating wholesale coffee rounds.
 

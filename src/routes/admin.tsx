@@ -1,5 +1,8 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
+import { Check, Circle, Trash2 } from "lucide-react"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
+import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
+import { Button } from "@/components/ui/button"
 import { formatKr, parseKroner } from "@/lib/money"
 import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
 import { unlockAdmin } from "@/server/auth"
@@ -19,31 +22,61 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 })
 
-type Dashboard = Extract<Awaited<ReturnType<typeof getAdminDashboard>>, { unlocked: true }>
+type Dashboard = Extract<
+  Awaited<ReturnType<typeof getAdminDashboard>>,
+  { unlocked: true }
+>
 type Coffee = Dashboard["coffees"][number]
 type Supplier = Dashboard["suppliers"][number]
-type Round = NonNullable<Dashboard["openRound"]> | Dashboard["closedRounds"][number]
+type Round =
+  | NonNullable<Dashboard["openRound"]>
+  | Dashboard["closedRounds"][number]
 
 function AdminPage() {
   const data = Route.useLoaderData()
   const router = useRouter()
 
   return (
-    <main className="min-h-svh bg-gradient-to-br from-stone-100 via-amber-50 to-stone-200 px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-5xl space-y-6">
-      <header className="space-y-1 pt-4">
-        <p className="text-sm uppercase tracking-[0.2em] text-stone-500">Kaffekollektivet</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Order Desk</h1>
-      </header>
-
-      {!data.unlocked ? <AdminPasswordForm onUnlocked={() => router.invalidate()} /> : null}
-      {data.unlocked ? <DashboardView dashboard={data} refresh={() => router.invalidate()} /> : null}
+    <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-7xl space-y-5">
+        <AdminHeader />
+        {!data.unlocked ? (
+          <AdminPasswordForm onUnlocked={() => router.invalidate()} />
+        ) : null}
+        {data.unlocked ? (
+          <DashboardView dashboard={data} refresh={() => router.invalidate()} />
+        ) : null}
       </div>
     </main>
   )
 }
 
-function AdminPasswordForm({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
+function AdminHeader() {
+  return (
+    <header className="flex items-center justify-between border-b border-(--ledger-line) py-4">
+      <div className="flex items-center gap-3">
+        <FilterEngravedMark />
+        <div>
+          <p className="font-mono text-[0.68rem] tracking-[0.22em] text-muted-foreground uppercase">
+            ADMIN
+          </p>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+            {BRAND_NAME}
+          </h1>
+        </div>
+      </div>
+      <p className="hidden font-mono text-xs text-muted-foreground sm:block">
+        Driftsprotokoll
+      </p>
+    </header>
+  )
+}
+
+function AdminPasswordForm({
+  onUnlocked,
+}: {
+  onUnlocked: () => Promise<void>
+}) {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
@@ -59,119 +92,356 @@ function AdminPasswordForm({ onUnlocked }: { onUnlocked: () => Promise<void> }) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
-      <label className="block space-y-2">
-        <span className="text-sm font-medium">Admin password</span>
-        <input className="w-full rounded-xl border border-stone-300 px-4 py-3 text-base" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+    <form
+      onSubmit={handleSubmit}
+      className="max-w-md rounded-lg border border-(--ledger-line) bg-card p-5"
+    >
+      <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+        TILGANG
+      </p>
+      <h2 className="mt-2 text-lg font-semibold">Lås opp admin</h2>
+      <label className="mt-5 block space-y-2">
+        <span className="text-sm font-medium">Adminpassord</span>
+        <input
+          className="h-10 w-full rounded-md border border-input px-3 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
       </label>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      <button className="rounded-xl bg-stone-950 px-4 py-3 font-medium text-white">Unlock admin</button>
+      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      <Button className="mt-5">Lås opp</Button>
     </form>
   )
 }
 
-function DashboardView({ dashboard, refresh }: { dashboard: Dashboard; refresh: () => Promise<void> }) {
+function DashboardView({
+  dashboard,
+  refresh,
+}: {
+  dashboard: Dashboard
+  refresh: () => Promise<void>
+}) {
   return (
-    <div className="space-y-6">
-      {dashboard.openRound ? (
-        <OpenRoundSection round={dashboard.openRound} refresh={refresh} />
-      ) : (
-        <CatalogSection dashboard={dashboard} refresh={refresh} />
-      )}
-      <HistorySection rounds={dashboard.closedRounds} refresh={refresh} />
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+      <div className="space-y-5">
+        {dashboard.openRound ? (
+          <OpenRoundSection round={dashboard.openRound} refresh={refresh} />
+        ) : (
+          <CatalogSection dashboard={dashboard} refresh={refresh} />
+        )}
+        <HistorySection rounds={dashboard.closedRounds} refresh={refresh} />
+      </div>
+      <StatusRail dashboard={dashboard} />
     </div>
   )
 }
 
-function CatalogSection({ dashboard, refresh }: { dashboard: Dashboard; refresh: () => Promise<void> }) {
-  const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
-  const [showInactive, setShowInactive] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Array<string>>([])
-  const selectedSupplier = dashboard.suppliers.find((supplier) => supplier.id === supplierId) ?? dashboard.suppliers[0]
-  const supplierCoffees = dashboard.coffees.filter((coffee) => coffee.supplierId === selectedSupplier?.id)
-  const visibleCoffees = supplierCoffees.filter((coffee) => showInactive || coffee.isActive)
-  const lastPrice = supplierCoffees[0]?.priceKr ?? 139
+function StatusRail({ dashboard }: { dashboard: Dashboard }) {
+  return (
+    <aside className="space-y-3 lg:sticky lg:top-5">
+      <CurrentRoundStats round={dashboard.openRound} />
+      <LastRoundStats rounds={dashboard.closedRounds} />
+    </aside>
+  )
+}
 
-  function toggleCoffee(id: string) {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]))
-  }
-
-  async function handleOpenRound() {
-    if (!selectedSupplier) return
-    await openRound({ data: { supplierId: selectedSupplier.id, coffeeIds: selectedIds } })
-    await refresh()
-  }
+function CurrentRoundStats({ round }: { round: Dashboard["openRound"] }) {
+  const orders = round?.orders ?? []
+  const bagCount = countBags(orders)
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Open next round</h2>
-        <p className="text-sm text-stone-600">Choose one supplier and tap rows to include coffees.</p>
+    <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <div>
+          <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+            NÅ
+          </p>
+          <h2 className="mt-1 font-semibold">Aktiv runde</h2>
+        </div>
+        <StatusPill
+          active={Boolean(round)}
+          label={round ? "Aktiv" : "Stengt"}
+        />
       </div>
-
-      <div className="flex flex-wrap gap-2">
-        {dashboard.suppliers.map((supplier) => (
-          <button
-            key={supplier.id}
-            className={`rounded-full px-4 py-2 text-sm font-medium ${supplier.id === selectedSupplier?.id ? "bg-stone-950 text-white" : "bg-stone-100"}`}
-            type="button"
-            onClick={() => {
-              setSupplierId(supplier.id)
-              setSelectedIds([])
-            }}
-          >
-            {supplier.name}
-          </button>
-        ))}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <RailMetric
+          label="Leverandør"
+          value={round?.supplier ? round.supplier.name : "Ingen"}
+        />
+        <RailMetric label="Ordre" value={orders.length} />
+        <RailMetric label="Poser" value={bagCount} />
+        <RailMetric label="Kaffe" value={round?.coffees.length ?? 0} />
       </div>
-
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
-        Show inactive
-      </label>
-
-      <div className="divide-y divide-stone-200 rounded-2xl border border-stone-200">
-        {visibleCoffees.map((coffee) => (
-          <CoffeeRow key={coffee.id} coffee={coffee} selected={selectedIds.includes(coffee.id)} onToggle={() => toggleCoffee(coffee.id)} refresh={refresh} />
-        ))}
-        {visibleCoffees.length === 0 ? <p className="p-4 text-sm text-stone-600">No coffees yet.</p> : null}
-      </div>
-
-      {selectedSupplier ? <AddCoffeeForm supplier={selectedSupplier} defaultPriceKr={lastPrice} onAdded={(coffee) => setSelectedIds((current) => [...current, coffee.id])} refresh={refresh} /> : null}
-
-      <button className="w-full rounded-xl bg-stone-950 px-4 py-3 font-medium text-white disabled:opacity-50" disabled={!selectedSupplier || selectedIds.length === 0} onClick={handleOpenRound} type="button">
-        Open round with {selectedIds.length} coffees
-      </button>
     </section>
   )
 }
 
-function CoffeeRow({ coffee, selected, onToggle, refresh }: { coffee: Coffee; selected: boolean; onToggle: () => void; refresh: () => Promise<void> }) {
+function LastRoundStats({ rounds }: { rounds: Dashboard["closedRounds"] }) {
+  const hasLastRound = rounds.length > 0
+  const lastRound = rounds[0]
+  const orders = hasLastRound ? lastRound.orders : []
+  const paidCount = orders.filter((order) => order.paid).length
+  const collectedCount = orders.filter((order) => order.collected).length
+
+  return (
+    <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
+      <div className="border-b border-border pb-3">
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          SISTE
+        </p>
+        <h2 className="mt-1 font-semibold">Forrige oppgjør</h2>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <RailMetric
+          label="Leverandør"
+          value={
+            hasLastRound && lastRound.supplier
+              ? lastRound.supplier.name
+              : "Ingen"
+          }
+        />
+        <RailMetric label="Ordre" value={orders.length} />
+        <RailMetric label="Betalt" value={`${paidCount}/${orders.length}`} />
+        <RailMetric
+          label="Hentet"
+          value={`${collectedCount}/${orders.length}`}
+        />
+        <RailMetric label="Arkiv" value={rounds.length} />
+        <RailMetric label="Poser" value={countBags(orders)} />
+      </div>
+    </section>
+  )
+}
+
+function countBags(orders: Round["orders"]) {
+  return orders.reduce(
+    (sum, order) =>
+      sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+    0
+  )
+}
+
+function RailMetric({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-mono text-base font-semibold">{value}</p>
+    </div>
+  )
+}
+
+function CatalogSection({
+  dashboard,
+  refresh,
+}: {
+  dashboard: Dashboard
+  refresh: () => Promise<void>
+}) {
+  const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
+  const [showInactive, setShowInactive] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Array<string>>([])
+  const selectedSupplier =
+    dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
+    dashboard.suppliers[0]
+  const supplierCoffees = dashboard.coffees.filter(
+    (coffee) => coffee.supplierId === selectedSupplier.id
+  )
+  const visibleCoffees = supplierCoffees.filter(
+    (coffee) => showInactive || coffee.isActive
+  )
+  const lastPrice = supplierCoffees[0]?.priceKr ?? 139
+
+  function toggleCoffee(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((selectedId) => selectedId !== id)
+        : [...current, id]
+    )
+  }
+
+  async function handleOpenRound() {
+    await openRound({
+      data: { supplierId: selectedSupplier.id, coffeeIds: selectedIds },
+    })
+    await refresh()
+  }
+
+  return (
+    <section className="rounded-lg border border-(--ledger-line) bg-card">
+      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+        <SectionTitle
+          kicker="01"
+          title="Kaffe"
+          subtitle="Velg leverandør. Marker varelinjer."
+        />
+      </div>
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap gap-2">
+          {dashboard.suppliers.map((supplier) => (
+            <Button
+              key={supplier.id}
+              variant={
+                supplier.id === selectedSupplier.id ? "default" : "outline"
+              }
+              size="sm"
+              type="button"
+              onClick={() => {
+                setSupplierId(supplier.id)
+                setSelectedIds([])
+              }}
+            >
+              {supplier.name}
+            </Button>
+          ))}
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(event) => setShowInactive(event.target.checked)}
+          />
+          Vis inaktive
+        </label>
+
+        <div className="overflow-hidden rounded-lg border border-border pt-4">
+          {visibleCoffees.map((coffee) => (
+            <CoffeeRow
+              key={coffee.id}
+              coffee={coffee}
+              selected={selectedIds.includes(coffee.id)}
+              onToggle={() => toggleCoffee(coffee.id)}
+              refresh={refresh}
+            />
+          ))}
+          {visibleCoffees.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              Ingen kaffe ennå.
+            </p>
+          ) : null}
+        </div>
+
+        <AddCoffeeForm
+          supplier={selectedSupplier}
+          defaultPriceKr={lastPrice}
+          onAdded={(coffee) =>
+            setSelectedIds((current) => [...current, coffee.id])
+          }
+          refresh={refresh}
+        />
+
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={selectedIds.length === 0}
+          onClick={handleOpenRound}
+          type="button"
+        >
+          Åpne runde med {selectedIds.length} kaffe
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function CoffeeRow({
+  coffee,
+  selected,
+  onToggle,
+  refresh,
+}: {
+  coffee: Coffee
+  selected: boolean
+  onToggle: () => void
+  refresh: () => Promise<void>
+}) {
   const [isEditing, setIsEditing] = useState(false)
 
   return (
-    <div className="p-4">
-      <button className="flex w-full items-center justify-between gap-3 text-left" type="button" onClick={onToggle}>
+    <div className="border-b border-border last:border-b-0">
+      <button
+        className="grid w-full gap-3 p-3 text-left hover:bg-muted/60 sm:grid-cols-[minmax(0,1fr)_7rem_6rem] sm:items-center"
+        type="button"
+        onClick={onToggle}
+      >
         <span className="flex min-w-0 items-center gap-3">
-          {coffee.imageUrl ? <img className="h-14 w-14 shrink-0 rounded-xl object-cover" src={coffee.imageUrl} alt={coffee.name} loading="lazy" /> : null}
+          {coffee.imageUrl ? (
+            <img
+              className="size-11 shrink-0 rounded-md object-cover"
+              src={coffee.imageUrl}
+              alt={coffee.name}
+              loading="lazy"
+            />
+          ) : (
+            <span className="size-11 shrink-0 rounded-md border border-border bg-muted" />
+          )}
           <span className="min-w-0">
-            <span className="font-medium">{coffee.name}</span>
-            {!coffee.isActive ? <span className="ml-2 rounded bg-stone-200 px-2 py-0.5 text-xs">Inactive</span> : null}
-            <span className="block text-sm text-stone-600">{formatKr(coffee.priceKr)} {coffee.description ? `· ${coffee.description}` : ""}</span>
+            <span className="block truncate text-sm font-semibold">
+              {coffee.name}
+            </span>
+            <span className="block truncate text-sm text-muted-foreground">
+              {coffee.description || "Ingen beskrivelse"}
+            </span>
           </span>
         </span>
-        <span className={`rounded-full px-3 py-1 text-sm ${selected ? "bg-green-700 text-white" : "bg-stone-100"}`}>{selected ? "Selected" : "Add"}</span>
+        <span className="font-mono text-sm font-semibold">
+          {formatKr(coffee.priceKr)}
+        </span>
+        <span className="justify-self-start sm:justify-self-end">
+          <StatusPill
+            active={selected}
+            label={
+              selected ? "Valgt" : coffee.isActive ? "Legg til" : "Inaktiv"
+            }
+          />
+        </span>
       </button>
-      <div className="mt-2 flex gap-4">
-        <button className="text-sm underline" type="button" onClick={() => setIsEditing((value) => !value)}>Edit</button>
-        <button className="text-sm text-red-700 underline" type="button" onClick={async () => { await archiveCoffee({ data: { id: coffee.id } }); await refresh() }}>Delete</button>
+      <div className="mt-2 flex gap-3 border-t border-border px-3 pt-3 pb-3">
+        <Button
+          variant="secondary"
+          size="xs"
+          type="button"
+          onClick={() => setIsEditing((value) => !value)}
+        >
+          Rediger
+        </Button>
+        <Button
+          variant="destructive"
+          size="xs"
+          type="button"
+          onClick={async () => {
+            await archiveCoffee({ data: { id: coffee.id } })
+            await refresh()
+          }}
+        >
+          <Trash2 /> Slett
+        </Button>
       </div>
       {isEditing ? <EditCoffeeForm coffee={coffee} refresh={refresh} /> : null}
     </div>
   )
 }
 
-function AddCoffeeForm({ supplier, defaultPriceKr, onAdded, refresh }: { supplier: Supplier; defaultPriceKr: number; onAdded: (coffee: Coffee) => void; refresh: () => Promise<void> }) {
+function AddCoffeeForm({
+  supplier,
+  defaultPriceKr,
+  onAdded,
+  refresh,
+}: {
+  supplier: Supplier
+  defaultPriceKr: number
+  onAdded: (coffee: Coffee) => void
+  refresh: () => Promise<void>
+}) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [imageUrl, setImageUrl] = useState("")
@@ -179,7 +449,15 @@ function AddCoffeeForm({ supplier, defaultPriceKr, onAdded, refresh }: { supplie
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const coffee = await addCoffee({ data: { supplierId: supplier.id, name, description, imageUrl, priceKr: parseKroner(price) } })
+    const coffee = await addCoffee({
+      data: {
+        supplierId: supplier.id,
+        name,
+        description,
+        imageUrl,
+        priceKr: parseKroner(price),
+      },
+    })
     onAdded(coffee)
     setName("")
     setDescription("")
@@ -189,17 +467,48 @@ function AddCoffeeForm({ supplier, defaultPriceKr, onAdded, refresh }: { supplie
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl bg-stone-100 p-4 sm:grid-cols-[1fr_1fr_1fr_8rem_auto]">
-      <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Coffee name" value={name} onChange={(event) => setName(event.target.value)} />
-      <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
-      <input className="rounded-xl border border-stone-300 px-3 py-2" placeholder="Image URL" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
-      <input className="rounded-xl border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))} />
-      <button className="rounded-xl bg-stone-950 px-4 py-2 font-medium text-white">Add</button>
+    <form
+      onSubmit={handleSubmit}
+      className="grid grid-cols-3 md:grid-cols-5 gap-2 rounded-lg border border-border bg-muted/40 p-3"
+    >
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        placeholder="Navn"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        placeholder="Beskrivelse"
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        placeholder="Bilde-URL"
+        type="url"
+        value={imageUrl}
+        onChange={(event) => setImageUrl(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring"
+        inputMode="numeric"
+        pattern="\d*"
+        value={price}
+        onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))}
+      />
+      <Button type="submit" className="h-full">Legg til</Button>
     </form>
   )
 }
 
-function EditCoffeeForm({ coffee, refresh }: { coffee: Coffee; refresh: () => Promise<void> }) {
+function EditCoffeeForm({
+  coffee,
+  refresh,
+}: {
+  coffee: Coffee
+  refresh: () => Promise<void>
+}) {
   const [name, setName] = useState(coffee.name)
   const [description, setDescription] = useState(coffee.description)
   const [imageUrl, setImageUrl] = useState(coffee.imageUrl)
@@ -208,47 +517,126 @@ function EditCoffeeForm({ coffee, refresh }: { coffee: Coffee; refresh: () => Pr
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await updateCoffee({ data: { id: coffee.id, supplierId: coffee.supplierId, name, description, imageUrl, priceKr: parseKroner(price), isActive } })
+    await updateCoffee({
+      data: {
+        id: coffee.id,
+        supplierId: coffee.supplierId,
+        name,
+        description,
+        imageUrl,
+        priceKr: parseKroner(price),
+        isActive,
+      },
+    })
     await refresh()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded-xl bg-stone-100 p-3 sm:grid-cols-[1fr_1fr_1fr_7rem_auto_auto]">
-      <input className="rounded-lg border border-stone-300 px-3 py-2" value={name} onChange={(event) => setName(event.target.value)} />
-      <input className="rounded-lg border border-stone-300 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} />
-      <input className="rounded-lg border border-stone-300 px-3 py-2" placeholder="Image URL" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
-      <input className="rounded-lg border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))} />
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Active</label>
-      <button className="rounded-lg bg-stone-950 px-3 py-2 text-white">Save</button>
+    <form
+      onSubmit={handleSubmit}
+      className="mx-3 mb-3 grid gap-2 rounded-lg border border-border bg-muted/40 p-3 sm:grid-cols-[1fr_1fr_1fr_7rem_auto_auto]"
+    >
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
+        placeholder="Bilde-URL"
+        type="url"
+        value={imageUrl}
+        onChange={(event) => setImageUrl(event.target.value)}
+      />
+      <input
+        className="h-9 rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring"
+        inputMode="numeric"
+        pattern="\d*"
+        value={price}
+        onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isActive}
+          onChange={(event) => setIsActive(event.target.checked)}
+        />{" "}
+        Aktiv
+      </label>
+      <Button type="submit">Lagre</Button>
     </form>
   )
 }
 
-function OpenRoundSection({ round, refresh }: { round: NonNullable<Dashboard["openRound"]>; refresh: () => Promise<void> }) {
+function OpenRoundSection({
+  round,
+  refresh,
+}: {
+  round: NonNullable<Dashboard["openRound"]>
+  refresh: () => Promise<void>
+}) {
   const [shipping, setShipping] = useState("0")
 
   async function handleClose() {
-    await closeRound({ data: { roundId: round.id, shippingKr: parseKroner(shipping) } })
+    await closeRound({
+      data: { roundId: round.id, shippingKr: parseKroner(shipping) },
+    })
     await refresh()
   }
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
-      <div>
-        <h2 className="text-xl font-semibold">Open round · {round.supplier?.name}</h2>
-        <p className="text-sm text-stone-600">Supplier is locked while this round is open.</p>
+    <section className="rounded-lg border border-(--ledger-line) bg-card">
+      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+        <SectionTitle
+          kicker="02"
+          title="Bestilling"
+          subtitle={`${round.supplier?.name}. Runde aktiv.`}
+        />
+        <StatusPill active label="Aktiv" />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {round.coffees.map((coffee) => <span key={coffee.id} className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-sm">{coffee.imageUrlSnapshot ? <img className="h-6 w-6 rounded-full object-cover" src={coffee.imageUrlSnapshot} alt="" loading="lazy" /> : null}{coffee.nameSnapshot} · {formatKr(coffee.priceKrSnapshot)}</span>)}
-      </div>
-      <BulkCoffeeTotals orders={round.orders} />
-      <OrderList orders={round.orders} refresh={refresh} />
-      <div className="flex flex-col gap-3 rounded-2xl bg-stone-100 p-4 sm:flex-row sm:items-end">
-        <label className="flex-1 space-y-1">
-          <span className="text-sm font-medium">Shipping in kroner</span>
-          <input className="w-full rounded-xl border border-stone-300 px-3 py-2" inputMode="numeric" pattern="\d*" value={shipping} onChange={(event) => setShipping(event.target.value.replace(/\D/g, ""))} />
-        </label>
-        <button className="rounded-xl bg-stone-950 px-4 py-3 font-medium text-white" type="button" onClick={handleClose}>Close round</button>
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap gap-2">
+          {round.coffees.map((coffee) => (
+            <span
+              key={coffee.id}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-2.5 py-1 font-mono text-xs"
+            >
+              {coffee.imageUrlSnapshot ? (
+                <img
+                  className="size-5 rounded object-cover"
+                  src={coffee.imageUrlSnapshot}
+                  alt=""
+                  loading="lazy"
+                />
+              ) : null}
+              {coffee.nameSnapshot} {formatKr(coffee.priceKrSnapshot)}
+            </span>
+          ))}
+        </div>
+        <BulkCoffeeTotals orders={round.orders} />
+        <OrderList orders={round.orders} refresh={refresh} />
+        <div className="grid gap-3 rounded-lg border border-border bg-muted/40 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Frakt i kroner</span>
+            <input
+              className="h-9 w-full rounded-md border border-input px-3 font-mono outline-none focus-visible:border-ring"
+              inputMode="numeric"
+              pattern="\d*"
+              value={shipping}
+              onChange={(event) =>
+                setShipping(event.target.value.replace(/\D/g, ""))
+              }
+            />
+          </label>
+          <Button type="button" onClick={handleClose}>
+            Lukk runde
+          </Button>
+        </div>
       </div>
     </section>
   )
@@ -259,17 +647,27 @@ function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
   if (totals.length === 0) return null
 
   return (
-    <section className="rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100">
-      <h3 className="font-semibold">Bulk order</h3>
+    <section className="rounded-lg border border-border bg-muted/30 p-3">
+      <h3 className="font-semibold">Samlet ordre</h3>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {totals.map((coffee) => (
-          <div key={coffee.name} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm">
+          <div
+            key={coffee.name}
+            className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-border bg-card p-2 text-sm"
+          >
             <span className="flex min-w-0 items-center gap-2">
-              {coffee.imageUrl ? <img className="h-9 w-9 shrink-0 rounded-lg object-cover" src={coffee.imageUrl} alt="" loading="lazy" /> : null}
+              {coffee.imageUrl ? (
+                <img
+                  className="size-8 shrink-0 rounded object-cover"
+                  src={coffee.imageUrl}
+                  alt=""
+                  loading="lazy"
+                />
+              ) : null}
               <span className="truncate font-medium">{coffee.name}</span>
             </span>
-            <span className="shrink-0 text-right">
-              <strong>{coffee.quantity}</strong> bags · {formatKr(coffee.totalKr)}
+            <span className="shrink-0 font-mono">
+              {coffee.quantity} poser {formatKr(coffee.totalKr)}
             </span>
           </div>
         ))}
@@ -278,124 +676,326 @@ function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
   )
 }
 
-function OrderList({ orders, refresh }: { orders: Round["orders"]; refresh: () => Promise<void> }) {
-  if (orders.length === 0) return <p className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">No orders yet.</p>
+function OrderList({
+  orders,
+  refresh,
+}: {
+  orders: Round["orders"]
+  refresh: () => Promise<void>
+}) {
+  if (orders.length === 0)
+    return (
+      <p className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+        Ingen ordre ennå.
+      </p>
+    )
 
   return (
-    <div className="space-y-3">
+    <div className="overflow-hidden rounded-lg border border-border">
       {orders.map((order) => (
-        <article key={order.id} className="rounded-2xl border border-stone-200 p-4">
-          <div className="flex items-start justify-between gap-3">
+        <article
+          key={order.id}
+          className="border-b border-border p-3 last:border-b-0"
+        >
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-start">
             <div>
               <h3 className="font-semibold">{order.customerName}</h3>
-              <p className="text-sm text-stone-600">{order.items.reduce((sum, item) => sum + item.quantity, 0)} bags</p>
+              <p className="font-mono text-sm text-muted-foreground">
+                {order.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
+                poser
+              </p>
             </div>
-            <button className="text-sm text-red-700 underline" type="button" onClick={async () => { await deleteOrder({ data: { orderId: order.id } }); await refresh() }}>Delete</button>
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              {order.items.map((item) => (
+                <li key={`${order.id}-${item.name}`}>
+                  {item.quantity} × {item.name} {formatKr(item.priceKr)}
+                </li>
+              ))}
+            </ul>
+            <Button
+              variant="destructive"
+              size="xs"
+              type="button"
+              onClick={async () => {
+                await deleteOrder({ data: { orderId: order.id } })
+                await refresh()
+              }}
+            >
+              Slett
+            </Button>
           </div>
-          <ul className="mt-3 space-y-1 text-sm">
-            {order.items.map((item) => <li key={`${order.id}-${item.name}`}>{item.quantity} × {item.name} · {formatKr(item.priceKr)}</li>)}
-          </ul>
         </article>
       ))}
     </div>
   )
 }
 
-function HistorySection({ rounds, refresh }: { rounds: Dashboard["closedRounds"]; refresh: () => Promise<void> }) {
+function HistorySection({
+  rounds,
+  refresh,
+}: {
+  rounds: Dashboard["closedRounds"]
+  refresh: () => Promise<void>
+}) {
   const [selectedRoundId, setSelectedRoundId] = useState(rounds[0]?.id ?? "")
-  const selectedRound = rounds.find((round) => round.id === selectedRoundId) ?? rounds[0]
+  const selectedRound =
+    rounds.find((round) => round.id === selectedRoundId) ?? rounds[0]
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
-      <h2 className="text-xl font-semibold">Closed rounds</h2>
-      {rounds.length === 0 ? <p className="text-sm text-stone-600">No closed rounds yet.</p> : null}
-      {rounds.length > 0 ? (
-        <select className="w-full rounded-xl border border-stone-300 px-3 py-2" value={selectedRound?.id ?? ""} onChange={(event) => setSelectedRoundId(event.target.value)}>
-          {rounds.map((round) => <option key={round.id} value={round.id}>{round.supplier?.name} · {formatDate(round.closedAt)}</option>)}
-        </select>
-      ) : null}
-      {selectedRound ? <ClosedRoundSummary round={selectedRound} refresh={refresh} /> : null}
+    <section className="rounded-lg border border-(--ledger-line) bg-card">
+      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+        <SectionTitle
+          kicker="03"
+          title="Oppgjør"
+          subtitle="Siste runde vises først."
+        />
+        <span className="font-mono text-xs text-muted-foreground">
+          {rounds.length} arkiv
+        </span>
+      </div>
+      <div className="space-y-4 p-4 sm:p-5">
+        {rounds.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Ingen avsluttede runder.
+          </p>
+        ) : null}
+        {rounds.length > 0 ? (
+          <select
+            className="h-9 w-full rounded-md border border-input py-0 pr-10 pl-3 text-sm outline-none focus-visible:border-ring"
+            value={selectedRound.id}
+            onChange={(event) => setSelectedRoundId(event.target.value)}
+          >
+            {rounds.map((round) => (
+              <option key={round.id} value={round.id}>
+                {round.supplier ? round.supplier.name : "Ukjent"}{" "}
+                {formatDate(round.closedAt)}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {rounds.length > 0 ? (
+          <ClosedRoundSummary round={selectedRound} refresh={refresh} />
+        ) : null}
+      </div>
     </section>
   )
 }
 
-function ClosedRoundSummary({ round, refresh }: { round: Dashboard["closedRounds"][number]; refresh: () => Promise<void> }) {
-  const totals = calculateRoundTotals({ shippingKr: round.shippingKr, orders: round.orders })
-  const pickupRows = useMemo(() => round.orders.map((order) => ({ order, items: order.items.filter((item) => item.quantity > 0) })), [round.orders])
+function ClosedRoundSummary({
+  round,
+  refresh,
+}: {
+  round: Dashboard["closedRounds"][number]
+  refresh: () => Promise<void>
+}) {
+  const totals = calculateRoundTotals({
+    shippingKr: round.shippingKr,
+    orders: round.orders,
+  })
+  const pickupRows = useMemo(
+    () =>
+      round.orders.map((order) => ({
+        order,
+        items: order.items.filter((item) => item.quantity > 0),
+      })),
+    [round.orders]
+  )
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl bg-stone-100 p-4 text-sm">
-        <p><strong>{round.supplier?.name}</strong></p>
-        <p>Opened: {formatDate(round.openedAt)} · Closed: {formatDate(round.closedAt)}</p>
-        <p>Shipping: {formatKr(round.shippingKr)}</p>
+    <div className="space-y-4">
+      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+        <Meta label="Leverandør" value={round.supplier?.name ?? "Ukjent"} />
+        <Meta label="Åpnet" value={formatDate(round.openedAt)} />
+        <Meta label="Frakt" value={formatKr(round.shippingKr)} />
       </div>
 
       <BulkCoffeeTotals orders={round.orders} />
 
-      <div className="space-y-3">
+      <div className="overflow-hidden rounded-lg border border-border">
         {totals.map((total) => (
           <ClosedOrderRow key={total.orderId} total={total} refresh={refresh} />
         ))}
       </div>
 
-      <div className="rounded-2xl bg-stone-100 p-4">
-        <h3 className="font-semibold">Pickup list</h3>
+      <div className="rounded-lg border border-border bg-muted/30 p-3">
+        <h3 className="font-semibold">Henteliste</h3>
         <ul className="mt-2 space-y-2 text-sm">
-          {pickupRows.map(({ order, items }) => <li key={order.id}><strong>{order.customerName}:</strong> {items.map((item) => `${item.quantity} × ${item.name}`).join(", ")}</li>)}
+          {pickupRows.map(({ order, items }) => (
+            <li key={order.id}>
+              <strong>{order.customerName}:</strong>{" "}
+              {items
+                .map((item) => `${item.quantity} × ${item.name}`)
+                .join(", ")}
+            </li>
+          ))}
         </ul>
       </div>
     </div>
   )
 }
 
-function ClosedOrderRow({ total, refresh }: { total: ReturnType<typeof calculateRoundTotals>[number]; refresh: () => Promise<void> }) {
-  const [expanded, setExpanded] = useState(false)
+function ClosedOrderRow({
+  total,
+  refresh,
+}: {
+  total: ReturnType<typeof calculateRoundTotals>[number]
+  refresh: () => Promise<void>
+}) {
+  const [expanded, setExpanded] = useState(true)
 
   return (
-    <article className="rounded-2xl border border-stone-200 p-4">
-      <button className="flex w-full items-start justify-between gap-3 text-left" type="button" onClick={() => setExpanded((value) => !value)}>
+    <article className="border-b border-border p-3 last:border-b-0">
+      <button
+        className="grid w-full gap-3 text-left sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+      >
         <span>
           <span className="block font-semibold">{total.customerName}</span>
-          <span className="text-sm text-stone-600">{total.items.reduce((sum, item) => sum + item.quantity, 0)} bags · {formatKr(total.totalKr)}</span>
+          <span className="font-mono text-sm text-muted-foreground">
+            {total.items.reduce((sum, item) => sum + item.quantity, 0)} poser{" "}
+            {formatKr(total.totalKr)}
+          </span>
         </span>
-        <span className="text-sm text-stone-500">{expanded ? "Hide" : "Details"}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <PaymentStatusPill checked={total.paid} />
+          <PickupStatusPill checked={total.collected} />
+        </span>
+        <span className="self-center justify-self-start font-mono text-sm text-muted-foreground sm:justify-self-end">
+          {expanded ? "Skjul" : "Detaljer"}
+        </span>
       </button>
 
       {expanded ? (
-        <div className="mt-3 border-t border-stone-200 pt-3">
-          <ul className="space-y-1 text-sm">
-            {total.items.map((item) => <li key={`${total.orderId}-${item.name}`}>{item.quantity} × {item.name}: {formatKr(item.subtotalKr)}</li>)}
+        <div className="mt-3 border-t border-border pt-3">
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {total.items.map((item) => (
+              <li key={`${total.orderId}-${item.name}`}>
+                {item.quantity} × {item.name}: {formatKr(item.subtotalKr)}
+              </li>
+            ))}
           </ul>
-          <div className="mt-3 grid gap-1 text-sm">
-            <p>Coffee subtotal: {formatKr(total.coffeeSubtotalKr)}</p>
-            <p>Shipping share: {formatKr(total.shippingShareKr)}</p>
-            <p className="font-semibold">Total owed: {formatKr(total.totalKr)}</p>
+          <div className="mt-3 grid gap-1 font-mono text-sm">
+            <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
+            <p>Frakt: {formatKr(total.shippingShareKr)}</p>
+            <p className="font-semibold">Totalt: {formatKr(total.totalKr)}</p>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              variant={total.paid ? "default" : "secondary"}
+              size="sm"
+              type="button"
+              onClick={async () => {
+                await updateOrderFlags({
+                  data: {
+                    orderId: total.orderId,
+                    paid: !total.paid,
+                    collected: total.collected,
+                  },
+                })
+                await refresh()
+              }}
+            >
+              Er betalt
+            </Button>
+            <Button
+              variant={total.collected ? "default" : "secondary"}
+              size="sm"
+              type="button"
+              onClick={async () => {
+                await updateOrderFlags({
+                  data: {
+                    orderId: total.orderId,
+                    paid: total.paid,
+                    collected: !total.collected,
+                  },
+                })
+                await refresh()
+              }}
+            >
+              Er hentet
+            </Button>
           </div>
         </div>
       ) : null}
-
-      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <FlagButton label="Paid" checked={total.paid} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: checked, collected: total.collected } }); await refresh() }} />
-        <FlagButton label="Collected" checked={total.collected} onChange={async (checked) => { await updateOrderFlags({ data: { orderId: total.orderId, paid: total.paid, collected: checked } }); await refresh() }} />
-      </div>
     </article>
   )
 }
 
-function FlagButton({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => Promise<void> }) {
+function SectionTitle({
+  kicker,
+  title,
+  subtitle,
+}: {
+  kicker: string
+  title: string
+  subtitle: string
+}) {
   return (
-    <button
-      className={`rounded-full px-3 py-1.5 font-medium ${checked ? "bg-green-700 text-white" : "bg-stone-100 text-stone-700"}`}
-      type="button"
-      onClick={() => void onChange(!checked)}
+    <div>
+      <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+        {kicker}
+      </p>
+      <h2 className="mt-1 text-lg font-semibold tracking-tight">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+    </div>
+  )
+}
+
+function Meta({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1 font-medium">{value}</p>
+    </div>
+  )
+}
+
+function StatusPill({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${active ? "border-(--ledger-ink) text-foreground" : "border-border text-muted-foreground"}`}
     >
-      {checked ? "✓ " : ""}{label}
-    </button>
+      {active ? <Check className="size-3" /> : <Circle className="size-3" />}
+      {label}
+    </span>
+  )
+}
+
+function PaymentStatusPill({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
+        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+        : "border-slate-200 bg-slate-50 text-slate-600"
+        }`}
+    >
+      {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
+      {checked ? "Betalt" : "Ikke betalt"}
+    </span>
+  )
+}
+
+function PickupStatusPill({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
+        ? "border-sky-200 bg-sky-50 text-sky-800"
+        : "border-slate-200 bg-slate-50 text-slate-600"
+        }`}
+    >
+      {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
+      {checked ? "Hentet" : "Ikke hentet"}
+    </span>
   )
 }
 
 function formatDate(value: Date | string | null) {
   if (!value) return "—"
-  return new Intl.DateTimeFormat("nb-NO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+  return new Intl.DateTimeFormat("nb-NO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value))
 }

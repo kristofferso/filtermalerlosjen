@@ -15,7 +15,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Kaffekollektivet",
+        title: "Filtermalerlosjen",
       },
     ],
     links: [
@@ -36,7 +36,7 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="no">
       <head>
         <HeadContent />
       </head>
