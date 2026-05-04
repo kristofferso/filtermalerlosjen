@@ -17,7 +17,6 @@ function CustomerPage() {
     <main className="min-h-svh bg-gradient-to-br from-stone-100 via-amber-50 to-stone-200 px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <header className="space-y-2 pt-4">
-        <p className="text-sm uppercase tracking-[0.2em] text-stone-500">Private coffee orders</p>
         <h1 className="text-3xl font-semibold tracking-tight">Kaffekollektivet</h1>
       </header>
 
