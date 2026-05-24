@@ -15,6 +15,13 @@
       "when": 1777891581233,
       "tag": "0001_outstanding_luckman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779651711743,
+      "tag": "0002_new_alex_wilder",
+      "breakpoints": true
     }
   ]
 }

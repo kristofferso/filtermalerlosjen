@@ -105,6 +105,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
   const router = useRouter()
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [customerName, setCustomerName] = useState("")
+  const [customerPhone, setCustomerPhone] = useState("")
   const [error, setError] = useState("")
   const [confirmation, setConfirmation] = useState<{
     bagCount: number
@@ -139,6 +140,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
         data: {
           roundId: openRound.id,
           customerName,
+          customerPhone,
           items: openRound.coffees.map((coffee) => ({
             roundCoffeeId: coffee.id,
             quantity: quantities[coffee.id] ?? 0,
@@ -148,6 +150,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
       setConfirmation({ bagCount, subtotalKr })
       setQuantities({})
       setCustomerName("")
+      setCustomerPhone("")
       await router.invalidate()
     } catch (cause) {
       setError(
@@ -271,6 +274,24 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
                   className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                   value={customerName}
                   onChange={(event) => setCustomerName(event.target.value)}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Telefonnummer</span>
+                <input
+                  className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{8}"
+                  minLength={8}
+                  maxLength={8}
+                  title="Skriv inn 8 siffer"
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  autoComplete="tel-national"
+                  required
                 />
               </label>
               {error ? (
@@ -281,7 +302,10 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
                 size="lg"
                 type="submit"
                 disabled={
-                  isSubmitting || bagCount === 0 || !customerName.trim()
+                  isSubmitting ||
+                  bagCount === 0 ||
+                  !customerName.trim() ||
+                  !customerPhone.trim()
                 }
               >
                 {isSubmitting ? "Sender" : "Send bestilling"}

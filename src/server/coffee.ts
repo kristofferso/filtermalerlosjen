@@ -3,6 +3,9 @@ import { and, desc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 import { assertAdmin, isAdminUnlocked, isCustomerUnlocked } from "./auth.server"
 import { db } from "@/db/client"
+import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
+import { calculateRoundTotals } from "@/lib/order-totals"
+import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
 import {
   coffees,
   orderItems,
@@ -40,9 +43,14 @@ const closeRoundSchema = z.object({
   roundId: uuidSchema,
   shippingKr: z.number().int().min(0),
 })
+const customerPhoneSchema = z
+  .string()
+  .trim()
+  .regex(EIGHT_DIGIT_PHONE_PATTERN, "Telefonnummer må være 8 siffer")
 const submitOrderSchema = z.object({
   roundId: uuidSchema,
   customerName: z.string().trim().min(1).max(80),
+  customerPhone: customerPhoneSchema,
   items: z.array(
     z.object({
       roundCoffeeId: uuidSchema,
@@ -97,6 +105,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
       id: string
       roundId: string
       customerName: string
+      customerPhone: string | null
       paid: boolean
       collected: boolean
       createdAt: Date
@@ -116,6 +125,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
         id: row.order.id,
         roundId: row.order.roundId,
         customerName: row.order.customerName,
+        customerPhone: row.order.customerPhone,
         paid: row.order.paid,
         collected: row.order.collected,
         createdAt: row.order.createdAt,
@@ -390,7 +400,11 @@ export const submitOrder = createServerFn({ method: "POST" })
 
     const [order] = await db
       .insert(orders)
-      .values({ roundId: data.roundId, customerName: data.customerName })
+      .values({
+        roundId: data.roundId,
+        customerName: data.customerName,
+        customerPhone: data.customerPhone,
+      })
       .returning()
     const byId = new Map(roundCoffeeRows.map((coffee) => [coffee.id, coffee]))
     await db.insert(orderItems).values(
@@ -403,6 +417,56 @@ export const submitOrder = createServerFn({ method: "POST" })
     )
 
     return { ok: true, orderId: order.id }
+  })
+
+export const getPaymentOrderData = createServerFn({ method: "GET" })
+  .inputValidator((input) => z.object({ orderId: uuidSchema }).parse(input))
+  .handler(async ({ data }) => {
+    const orderRows = await db
+      .select({ order: orders, round: rounds })
+      .from(orders)
+      .innerJoin(rounds, eq(rounds.id, orders.roundId))
+      .where(eq(orders.id, data.orderId))
+      .limit(1)
+    const row = orderRows.at(0)
+    if (!row) return null
+
+    const orderSummaries = await getOrderSummaries([row.order.roundId])
+    const orderSummary = orderSummaries.find(
+      (summary) => summary.id === data.orderId
+    )
+    if (!orderSummary) return null
+
+    const total = calculateRoundTotals({
+      shippingKr: row.round.shippingKr,
+      orders: orderSummaries,
+    }).find((summary) => summary.orderId === data.orderId)
+    if (!total) return null
+
+    const receiverPhoneNumber = process.env.VIPPS_PHONE_NUMBER ?? ""
+    let vippsUrl: string | null = null
+    if (receiverPhoneNumber) {
+      vippsUrl = buildVippsPaymentUrl({
+        phoneNumber: receiverPhoneNumber,
+        amountKr: total.totalKr,
+        message: createVippsMessage(total.customerName, total.orderId),
+      })
+    }
+
+    return {
+      orderId: total.orderId,
+      customerName: total.customerName,
+      customerPhone: orderSummary.customerPhone,
+      createdAt: orderSummary.createdAt,
+      paid: total.paid,
+      collected: total.collected,
+      items: total.items,
+      bagCount: total.items.reduce((sum, item) => sum + item.quantity, 0),
+      coffeeSubtotalKr: total.coffeeSubtotalKr,
+      shippingShareKr: total.shippingShareKr,
+      totalKr: total.totalKr,
+      vippsUrl,
+    }
   })
 
 export const deleteOrder = createServerFn({ method: "POST" })

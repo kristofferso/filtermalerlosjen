@@ -855,6 +855,14 @@ function ClosedOrderRow({
   refresh: () => Promise<void>
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  async function copyPaymentLink() {
+    const link = `${window.location.origin}/betaling/${total.orderId}`
+    await navigator.clipboard.writeText(link)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
 
   return (
     <article className="border-b border-border p-3 last:border-b-0">
@@ -927,6 +935,14 @@ function ClosedOrderRow({
               }}
             >
               Er hentet
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              onClick={copyPaymentLink}
+            >
+              {copied ? "Kopiert" : "Kopier betalingslenke"}
             </Button>
           </div>
         </div>
