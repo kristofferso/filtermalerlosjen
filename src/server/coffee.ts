@@ -151,15 +151,18 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
       .limit(1)
     const supplier = supplierRows.at(0)
     if (!supplier) throw new Error("Supplier not found")
-    const selectedCoffees = await db
-      .select({
-        roundCoffee: roundCoffees,
-        coffee: coffees,
-      })
-      .from(roundCoffees)
-      .leftJoin(coffees, eq(coffees.id, roundCoffees.coffeeId))
-      .where(eq(roundCoffees.roundId, openRound.id))
-      .orderBy(roundCoffees.createdAt)
+    const [selectedCoffees, orderRows] = await Promise.all([
+      db
+        .select({
+          roundCoffee: roundCoffees,
+          coffee: coffees,
+        })
+        .from(roundCoffees)
+        .leftJoin(coffees, eq(coffees.id, roundCoffees.coffeeId))
+        .where(eq(roundCoffees.roundId, openRound.id))
+        .orderBy(roundCoffees.createdAt),
+      getOrderSummaries([openRound.id]),
+    ])
 
     return {
       unlocked: true as const,
@@ -173,6 +176,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
           imageUrl: roundCoffee.imageUrlSnapshot,
           priceKr: roundCoffee.priceKrSnapshot,
         })),
+        orders: orderRows,
       },
     }
   }

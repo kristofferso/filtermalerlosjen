@@ -107,10 +107,22 @@ function AdminPasswordForm({
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "admin-password-error" : undefined}
         />
       </label>
-      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-      <Button className="mt-5">Lås opp</Button>
+      {error ? (
+        <p
+          id="admin-password-error"
+          className="mt-3 text-sm text-destructive"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      <Button className="mt-5" type="submit">
+        Lås opp
+      </Button>
     </form>
   )
 }

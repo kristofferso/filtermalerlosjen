@@ -5,6 +5,8 @@ import { createSessionToken, requireEnv, verifySessionToken } from "@/lib/auth"
 export const CUSTOMER_COOKIE = "kk_customer_session"
 export const ADMIN_COOKIE = "kk_admin_session"
 
+const WRONG_PASSWORD_ERROR = "Feil passord"
+
 const sessionCookieOptions = {
   httpOnly: true,
   sameSite: "lax" as const,
@@ -15,7 +17,7 @@ const sessionCookieOptions = {
 
 export async function unlockCustomerSession(password: string) {
   if (password !== requireEnv("CUSTOMER_PASSWORD")) {
-    return { ok: false, error: "Wrong password" } as const
+    return { ok: false, error: WRONG_PASSWORD_ERROR } as const
   }
 
   setCookie(
@@ -32,7 +34,7 @@ export async function unlockCustomerSession(password: string) {
 
 export async function unlockAdminSession(password: string) {
   if (password !== requireEnv("ADMIN_PASSWORD")) {
-    return { ok: false, error: "Wrong password" } as const
+    return { ok: false, error: WRONG_PASSWORD_ERROR } as const
   }
 
   setCookie(

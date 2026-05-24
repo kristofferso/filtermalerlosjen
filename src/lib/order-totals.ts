@@ -38,6 +38,43 @@ export type OrderTotal = {
   }>
 }
 
+export type OrderLeaderboardEntry = {
+  orderId: string
+  customerName: string
+  bagCount: number
+  totalKr: number
+}
+
+export function calculateOrderLeaderboard(
+  orders: RoundTotalsInput["orders"]
+): Array<OrderLeaderboardEntry> {
+  return orders
+    .map((order) => {
+      const bagCount = order.items.reduce(
+        (sum, item) => sum + Math.max(0, item.quantity),
+        0
+      )
+      const totalKr = order.items.reduce(
+        (sum, item) => sum + Math.max(0, item.quantity) * item.priceKr,
+        0
+      )
+
+      return {
+        orderId: order.id,
+        customerName: order.customerName,
+        bagCount,
+        totalKr,
+      }
+    })
+    .filter((entry) => entry.bagCount > 0)
+    .sort(
+      (left, right) =>
+        right.bagCount - left.bagCount ||
+        right.totalKr - left.totalKr ||
+        left.customerName.localeCompare(right.customerName, "nb-NO")
+    )
+}
+
 export function calculateCoffeeTotals(orders: RoundTotalsInput["orders"]): Array<CoffeeTotal> {
   const totals = new Map<string, CoffeeTotal>()
 

@@ -3,8 +3,9 @@ import { useMemo, useState } from "react"
 import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
-import { getCustomerHomeData, submitOrder } from "@/server/coffee"
+import { calculateOrderLeaderboard } from "@/lib/order-totals"
 import { unlockCustomer } from "@/server/auth.functions"
+import { getCustomerHomeData, submitOrder } from "@/server/coffee"
 
 export const Route = createFileRoute("/")({
   loader: () => getCustomerHomeData(),
@@ -34,7 +35,7 @@ function CustomerPage() {
 
 function AppHeader({ title }: { title: string }) {
   return (
-    <header className="flex items-center border-b border-[var(--ledger-line)] py-4">
+    <header className="flex items-center border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
         <FilterEngravedMark />
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
@@ -102,10 +103,25 @@ function PasswordForm({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "customer-password-error" : undefined}
         />
       </label>
-      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-      <Button className="mt-5 w-full" size="lg" disabled={isSubmitting}>
+      {error ? (
+        <p
+          id="customer-password-error"
+          className="mt-3 text-sm text-destructive"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      <Button
+        className="mt-5 w-full"
+        size="lg"
+        type="submit"
+        disabled={isSubmitting}
+      >
         {isSubmitting ? "Låser opp" : "Lås opp"}
       </Button>
     </form>
@@ -120,6 +136,7 @@ type OpenRound = NonNullable<
 >
 
 function OrderForm({ openRound }: { openRound: OpenRound }) {
+  const router = useRouter()
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [customerName, setCustomerName] = useState("")
   const [error, setError] = useState("")
@@ -165,6 +182,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
       setConfirmation({ bagCount, subtotalKr })
       setQuantities({})
       setCustomerName("")
+      await router.invalidate()
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Kunne ikke sende bestilling"
@@ -182,13 +200,13 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
       <section className="rounded-lg border border-[var(--ledger-line)] bg-card">
         <div className="border-b border-border p-4 sm:p-5">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            BESTILLING AKTIV
+            BESTILLING ÅPEN
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">
             {openRound.supplier.name}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Evt. frakt deles likt mellom alle som bestiller.
+            Frakt deles likt mellom alle som bestiller.
           </p>
         </div>
 
@@ -252,55 +270,144 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
         </div>
       </section>
 
-      <section className="sticky bottom-4 rounded-lg border border-[var(--ledger-line)] bg-card p-4 shadow-sm lg:top-5">
-        {confirmation ? (
-          <div>
-            <p className="font-mono text-xs tracking-[0.18em] text-[var(--ledger-success)] uppercase">
-              ✓ SENDT
-            </p>
-            <h3 className="mt-2 text-lg font-semibold">Bestilling sendt</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {confirmation.bagCount} poser. Kaffe{" "}
-              {formatKr(confirmation.subtotalKr)}. Frakt kommer senere.
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Send melding til Kristoffer hvis noe må endres.
-            </p>
-            <Button
-              className="mt-5 w-full"
-              type="button"
-              onClick={() => setConfirmation(null)}
-            >
-              Bestill mer
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 border-b border-border pb-4">
-              <SummaryCell label="Poser" value={bagCount} />
-              <SummaryCell label="Sum" value={formatKr(subtotalKr)} />
+      <aside className="space-y-5 lg:sticky lg:top-5">
+        <section className="rounded-lg border border-[var(--ledger-line)] bg-card p-4 shadow-sm">
+          {confirmation ? (
+            <div>
+              <p className="font-mono text-xs tracking-[0.18em] text-[var(--ledger-success)] uppercase">
+                ✓ SENDT
+              </p>
+              <h3 className="mt-2 text-lg font-semibold">Bestilling sendt</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {confirmation.bagCount} poser. Kaffe{" "}
+                {formatKr(confirmation.subtotalKr)}. Frakt kommer senere.
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Send melding til Kristoffer hvis noe må endres.
+              </p>
+              <Button
+                className="mt-5 w-full"
+                type="button"
+                onClick={() => setConfirmation(null)}
+              >
+                Bestill mer
+              </Button>
             </div>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium">Navn</span>
-              <input
-                className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-              />
-            </label>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <Button
-              className="w-full"
-              size="lg"
-              disabled={isSubmitting || bagCount === 0 || !customerName.trim()}
-            >
-              {isSubmitting ? "Sender" : "Send bestilling"}
-            </Button>
-          </div>
-        )}
-      </section>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 border-b border-border pb-4">
+                <SummaryCell label="Poser" value={bagCount} />
+                <SummaryCell label="Sum" value={formatKr(subtotalKr)} />
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Ditt navn</span>
+                <input
+                  className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                />
+              </label>
+              {error ? (
+                <p className="text-sm text-destructive">{error}</p>
+              ) : null}
+              <Button
+                className="w-full"
+                size="lg"
+                type="submit"
+                disabled={isSubmitting || bagCount === 0 || !customerName.trim()}
+              >
+                {isSubmitting ? "Sender" : "Send bestilling"}
+              </Button>
+            </div>
+          )}
+        </section>
+        <OrderLeaderboard orders={openRound.orders} />
+      </aside>
     </form>
   )
+}
+
+function OrderLeaderboard({ orders }: { orders: OpenRound["orders"] }) {
+  const [expanded, setExpanded] = useState(false)
+  const entries = useMemo(() => calculateOrderLeaderboard(orders), [orders])
+  if (entries.length === 0) return null
+
+  const totalBags = entries.reduce((sum, entry) => sum + entry.bagCount, 0)
+  const totalKr = entries.reduce((sum, entry) => sum + entry.totalKr, 0)
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-[var(--ledger-line)] bg-card shadow-sm">
+      <button
+        className="grid w-full gap-3 p-4 text-left hover:bg-muted/50"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        <span>
+          <span className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+            TOPPLISTE
+          </span>
+          <span className="mt-1 block text-sm font-semibold">
+            {entries.length} bestillinger, {totalBags} poser, {formatKr(totalKr)}
+          </span>
+        </span>
+        <span className="justify-self-start rounded-md border border-border px-2 py-1 font-mono text-xs text-muted-foreground">
+          {expanded ? "Skjul" : "Vis liste"}
+        </span>
+      </button>
+
+      {expanded ? (
+        <ol className="divide-y divide-border border-t border-border">
+          {entries.map((entry, index) => (
+            <li key={entry.orderId} className="p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={`grid size-10 shrink-0 place-items-center rounded-md border font-mono text-xs font-semibold ${avatarClassName(index)}`}
+                    aria-hidden="true"
+                  >
+                    {getInitials(entry.customerName)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {entry.customerName}
+                    </p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      #{index + 1}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-mono text-sm font-semibold">
+                    {entry.bagCount} poser
+                  </p>
+                  <p className="font-mono text-sm text-muted-foreground">
+                    {formatKr(entry.totalKr)}
+                  </p>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  )
+}
+
+function avatarClassName(index: number) {
+  if (index === 0) return "border-amber-300 bg-amber-100 text-amber-900"
+  if (index === 1) return "border-slate-300 bg-slate-100 text-slate-800"
+  if (index === 2) return "border-orange-300 bg-orange-100 text-orange-900"
+  return "border-border bg-card text-muted-foreground"
+}
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase("nb-NO"))
+    .join("")
 }
 
 function SummaryCell({

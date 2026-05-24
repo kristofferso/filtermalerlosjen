@@ -20,6 +20,11 @@ export const Route = createRootRoute({
     ],
     links: [
       {
+        rel: "icon",
+        href: "/filtermalerlosjen-logo.png",
+        type: "image/png",
+      },
+      {
         rel: "stylesheet",
         href: appCss,
       },
