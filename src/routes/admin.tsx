@@ -60,7 +60,7 @@ function AdminHeader() {
           <p className="font-mono text-[0.68rem] tracking-[0.22em] text-muted-foreground uppercase">
             ADMIN
           </p>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          <h1 className="font-serif text-2xl font-normal tracking-tight sm:text-3xl">
             {BRAND_NAME}
           </h1>
         </div>
@@ -99,7 +99,7 @@ function AdminPasswordForm({
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         TILGANG
       </p>
-      <h2 className="mt-2 text-lg font-semibold">Lås opp admin</h2>
+      <h2 className="mt-2 text-xl">Lås opp admin</h2>
       <label className="mt-5 block space-y-2">
         <span className="text-sm font-medium">Adminpassord</span>
         <input
@@ -169,7 +169,7 @@ function CurrentRoundStats({ round }: { round: Dashboard["openRound"] }) {
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
             NÅ
           </p>
-          <h2 className="mt-1 font-semibold">Aktiv runde</h2>
+          <h2 className="mt-1 text-lg">Aktiv runde</h2>
         </div>
         <StatusPill
           active={Boolean(round)}
@@ -202,7 +202,7 @@ function LastRoundStats({ rounds }: { rounds: Dashboard["closedRounds"] }) {
         <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
           SISTE
         </p>
-        <h2 className="mt-1 font-semibold">Forrige oppgjør</h2>
+        <h2 className="mt-1 text-lg">Forrige oppgjør</h2>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <RailMetric
@@ -660,7 +660,7 @@ function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
 
   return (
     <section className="rounded-lg border border-border bg-muted/30 p-3">
-      <h3 className="font-semibold">Samlet ordre</h3>
+      <h3 className="text-lg">Samlet ordre</h3>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {totals.map((coffee) => (
           <div
@@ -711,7 +711,7 @@ function OrderList({
         >
           <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-start">
             <div>
-              <h3 className="font-semibold">{order.customerName}</h3>
+              <h3 className="text-lg">{order.customerName}</h3>
               <p className="font-mono text-sm text-muted-foreground">
                 {order.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
                 poser
@@ -830,7 +830,7 @@ function ClosedRoundSummary({
       </div>
 
       <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <h3 className="font-semibold">Henteliste</h3>
+        <h3 className="text-lg">Henteliste</h3>
         <ul className="mt-2 space-y-2 text-sm">
           {pickupRows.map(({ order, items }) => (
             <li key={order.id}>
@@ -948,7 +948,7 @@ function SectionTitle({
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         {kicker}
       </p>
-      <h2 className="mt-1 text-lg font-semibold tracking-tight">{title}</h2>
+      <h2 className="mt-1 text-xl tracking-tight">{title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
     </div>
   )

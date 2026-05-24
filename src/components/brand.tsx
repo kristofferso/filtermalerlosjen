@@ -1,15 +1,14 @@
+import { cn } from "@/lib/utils"
+
 export const BRAND_NAME = "Filtermalerlosjen"
 
-export function FilterEngravedMark() {
+export function FilterEngravedMark({ className }: { className?: string }) {
   return (
-    <div
-      className="h-12 w-16 bg-stone-100 rounded-xl p-0.5"
-
-    >
+    <div className={cn("h-12 w-16", className)}>
       <img
         src="/filtermalerlosjen-logo.png"
         alt=""
-        className="h-full mx-auto object-cover"
+        className="mx-auto h-full object-cover"
         loading="eager"
       />
     </div>

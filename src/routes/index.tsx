@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
+import { CustomerPasswordLanding } from "@/components/customer-lock"
 import { Button } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
 import { calculateOrderLeaderboard } from "@/lib/order-totals"
@@ -16,18 +17,21 @@ function CustomerPage() {
   const data = Route.useLoaderData()
   const router = useRouter()
 
+  if (!data.unlocked) {
+    return (
+      <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
+        <PasswordForm onUnlocked={() => router.invalidate()} />
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
         <AppHeader title={BRAND_NAME} />
 
-        {!data.unlocked ? (
-          <PasswordForm onUnlocked={() => router.invalidate()} />
-        ) : null}
-        {data.unlocked && !data.openRound ? <EmptyState /> : null}
-        {data.unlocked && data.openRound ? (
-          <OrderForm openRound={data.openRound} />
-        ) : null}
+        {!data.openRound ? <EmptyState /> : null}
+        {data.openRound ? <OrderForm openRound={data.openRound} /> : null}
       </div>
     </main>
   )
@@ -38,7 +42,7 @@ function AppHeader({ title }: { title: string }) {
     <header className="flex items-center border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
         <FilterEngravedMark />
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+        <h1 className="font-serif text-3xl font-normal tracking-tight sm:text-4xl">
           {title}
         </h1>
       </div>
@@ -52,7 +56,7 @@ function EmptyState() {
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         STATUS
       </p>
-      <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+      <h2 className="mt-3 text-3xl tracking-tight">
         Ingen bestilling akkurat nå
       </h2>
       <p className="mt-2 max-w-prose text-sm text-muted-foreground">
@@ -81,50 +85,13 @@ function PasswordForm({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
   }
 
   return (
-    <form
+    <CustomerPasswordLanding
+      password={password}
+      error={error}
+      isSubmitting={isSubmitting}
+      onPasswordChange={setPassword}
       onSubmit={handleSubmit}
-      className="rounded-lg border border-[var(--ledger-line)] bg-card p-5"
-    >
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            TILGANG
-          </p>
-          <h2 className="mt-2 text-lg font-semibold">Lås opp bestilling</h2>
-        </div>
-        <span className="rounded-md border border-border px-2 py-1 font-mono text-xs text-muted-foreground">
-          PASSORD
-        </span>
-      </div>
-      <label className="block space-y-2">
-        <span className="text-sm font-medium">Kaffepassord</span>
-        <input
-          className="h-11 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "customer-password-error" : undefined}
-        />
-      </label>
-      {error ? (
-        <p
-          id="customer-password-error"
-          className="mt-3 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-      <Button
-        className="mt-5 w-full"
-        size="lg"
-        type="submit"
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? "Låser opp" : "Lås opp"}
-      </Button>
-    </form>
+    />
   )
 }
 
@@ -202,7 +169,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
             BESTILLING ÅPEN
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+          <h2 className="mt-2 font-serif text-3xl font-normal tracking-tight">
             {openRound.supplier.name}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -277,7 +244,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
               <p className="font-mono text-xs tracking-[0.18em] text-[var(--ledger-success)] uppercase">
                 ✓ SENDT
               </p>
-              <h3 className="mt-2 text-lg font-semibold">Bestilling sendt</h3>
+              <h3 className="mt-2 text-xl">Bestilling sendt</h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {confirmation.bagCount} poser. Kaffe{" "}
                 {formatKr(confirmation.subtotalKr)}. Frakt kommer senere.
