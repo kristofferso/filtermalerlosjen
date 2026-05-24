@@ -59,16 +59,16 @@ const updateOrderFlagsSchema = z.object({
 })
 
 async function getOpenRoundRecord() {
-  const [round] = await db
+  const openRoundRows = await db
     .select()
     .from(rounds)
     .where(eq(rounds.status, "open"))
     .limit(1)
-  return round
+  return openRoundRows.at(0) ?? null
 }
 
-function groupBy<T, K>(items: Array<T>, getKey: (item: T) => K) {
-  const grouped = new Map<K, Array<T>>()
+function groupBy<T, TKey>(items: Array<T>, getKey: (item: T) => TKey) {
+  const grouped = new Map<TKey, Array<T>>()
   for (const item of items) {
     const key = getKey(item)
     grouped.set(key, [...(grouped.get(key) ?? []), item])
@@ -110,8 +110,9 @@ async function getOrderSummaries(roundIds: Array<string>) {
   >()
 
   for (const row of rows) {
-    if (!byOrder.has(row.order.id)) {
-      byOrder.set(row.order.id, {
+    let orderSummary = byOrder.get(row.order.id)
+    if (!orderSummary) {
+      orderSummary = {
         id: row.order.id,
         roundId: row.order.roundId,
         customerName: row.order.customerName,
@@ -119,11 +120,12 @@ async function getOrderSummaries(roundIds: Array<string>) {
         collected: row.order.collected,
         createdAt: row.order.createdAt,
         items: [],
-      })
+      }
+      byOrder.set(row.order.id, orderSummary)
     }
 
     if (row.item && row.roundCoffee) {
-      byOrder.get(row.order.id)?.items.push({
+      orderSummary.items.push({
         name: row.roundCoffee.nameSnapshot,
         imageUrl: row.roundCoffee.imageUrlSnapshot,
         quantity: row.item.quantity,
@@ -142,11 +144,13 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
     const openRound = await getOpenRoundRecord()
     if (!openRound) return { unlocked: true as const, openRound: null }
 
-    const [supplier] = await db
+    const supplierRows = await db
       .select()
       .from(suppliers)
       .where(eq(suppliers.id, openRound.supplierId))
       .limit(1)
+    const supplier = supplierRows.at(0)
+    if (!supplier) throw new Error("Supplier not found")
     const selectedCoffees = await db
       .select({
         roundCoffee: roundCoffees,
@@ -196,9 +200,9 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
       ])
 
     const roundIds = [
-      openRound?.id,
+      ...(openRound ? [openRound.id] : []),
       ...closedRoundRows.map((round) => round.id),
-    ].filter(Boolean) as Array<string>
+    ]
     const [roundCoffeeRows, orderRows] = await Promise.all([
       roundIds.length > 0
         ? db
@@ -332,7 +336,7 @@ export const closeRound = createServerFn({ method: "POST" })
   .inputValidator((input) => closeRoundSchema.parse(input))
   .handler(async ({ data }) => {
     await assertAdmin()
-    const [round] = await db
+    const updatedRoundRows = await db
       .update(rounds)
       .set({
         status: "closed",
@@ -342,6 +346,7 @@ export const closeRound = createServerFn({ method: "POST" })
       })
       .where(and(eq(rounds.id, data.roundId), eq(rounds.status, "open")))
       .returning()
+    const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Open round not found")
     return round
   })
@@ -355,11 +360,12 @@ export const submitOrder = createServerFn({ method: "POST" })
     const items = data.items.filter((item) => item.quantity > 0)
     if (items.length === 0) throw new Error("Choose at least one coffee")
 
-    const [round] = await db
+    const openRoundRows = await db
       .select()
       .from(rounds)
       .where(and(eq(rounds.id, data.roundId), eq(rounds.status, "open")))
       .limit(1)
+    const round = openRoundRows.at(0)
     if (!round) throw new Error("This coffee round is no longer open")
 
     const roundCoffeeRows = await db
