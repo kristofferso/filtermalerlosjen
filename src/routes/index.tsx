@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
-import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
+import { BRAND_NAME } from "@/components/brand"
 import { CustomerPasswordLanding } from "@/components/customer-lock"
 import { Button } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
@@ -19,7 +19,7 @@ function CustomerPage() {
 
   if (!data.unlocked) {
     return (
-      <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
+      <main className="min-h-svh text-foreground">
         <PasswordForm onUnlocked={() => router.invalidate()} />
       </main>
     )
@@ -41,7 +41,6 @@ function AppHeader({ title }: { title: string }) {
   return (
     <header className="flex items-center border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
-        <FilterEngravedMark />
         <h1 className="font-serif text-3xl font-normal tracking-tight sm:text-4xl">
           {title}
         </h1>
@@ -281,7 +280,9 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
                 className="w-full"
                 size="lg"
                 type="submit"
-                disabled={isSubmitting || bagCount === 0 || !customerName.trim()}
+                disabled={
+                  isSubmitting || bagCount === 0 || !customerName.trim()
+                }
               >
                 {isSubmitting ? "Sender" : "Send bestilling"}
               </Button>
@@ -315,7 +316,8 @@ function OrderLeaderboard({ orders }: { orders: OpenRound["orders"] }) {
             TOPPLISTE
           </span>
           <span className="mt-1 block text-sm font-semibold">
-            {entries.length} bestillinger, {totalBags} poser, {formatKr(totalKr)}
+            {entries.length} bestillinger, {totalBags} poser,{" "}
+            {formatKr(totalKr)}
           </span>
         </span>
         <span className="justify-self-start rounded-md border border-border px-2 py-1 font-mono text-xs text-muted-foreground">

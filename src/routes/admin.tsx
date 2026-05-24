@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Check, Circle, Trash2 } from "lucide-react"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
-import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
+import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr, parseKroner } from "@/lib/money"
 import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
@@ -55,7 +55,6 @@ function AdminHeader() {
   return (
     <header className="flex items-center justify-between border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
-        <FilterEngravedMark />
         <div>
           <p className="font-mono text-[0.68rem] tracking-[0.22em] text-muted-foreground uppercase">
             ADMIN
@@ -481,7 +480,7 @@ function AddCoffeeForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid grid-cols-3 md:grid-cols-5 gap-2 rounded-lg border border-border bg-muted/40 p-3"
+      className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-muted/40 p-3 md:grid-cols-5"
     >
       <input
         className="h-9 rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring"
@@ -509,7 +508,9 @@ function AddCoffeeForm({
         value={price}
         onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))}
       />
-      <Button type="submit" className="h-full">Legg til</Button>
+      <Button type="submit" className="h-full">
+        Legg til
+      </Button>
     </form>
   )
 }
@@ -979,10 +980,11 @@ function StatusPill({ active, label }: { active: boolean; label: string }) {
 function PaymentStatusPill({ checked }: { checked: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
-        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-        : "border-slate-200 bg-slate-50 text-slate-600"
-        }`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${
+        checked
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-slate-200 bg-slate-50 text-slate-600"
+      }`}
     >
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Betalt" : "Ikke betalt"}
@@ -993,10 +995,11 @@ function PaymentStatusPill({ checked }: { checked: boolean }) {
 function PickupStatusPill({ checked }: { checked: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
-        ? "border-sky-200 bg-sky-50 text-sky-800"
-        : "border-slate-200 bg-slate-50 text-slate-600"
-        }`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${
+        checked
+          ? "border-sky-200 bg-sky-50 text-sky-800"
+          : "border-slate-200 bg-slate-50 text-slate-600"
+      }`}
     >
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Hentet" : "Ikke hentet"}

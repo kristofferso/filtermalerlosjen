@@ -5,7 +5,8 @@ import { createSessionToken, requireEnv, verifySessionToken } from "@/lib/auth"
 export const CUSTOMER_COOKIE = "kk_customer_session"
 export const ADMIN_COOKIE = "kk_admin_session"
 
-const WRONG_PASSWORD_ERROR = "Feil passord"
+const WRONG_PASSWORD_ERROR =
+  "Det er ikke det hemmelige ordet! Er du med i losjen??"
 
 const sessionCookieOptions = {
   httpOnly: true,
