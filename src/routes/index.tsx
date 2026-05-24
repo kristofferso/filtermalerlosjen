@@ -4,7 +4,7 @@ import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
 import { getCustomerHomeData, submitOrder } from "@/server/coffee"
-import { unlockCustomer } from "@/server/auth"
+import { unlockCustomer } from "@/server/auth.functions"
 
 export const Route = createFileRoute("/")({
   loader: () => getCustomerHomeData(),

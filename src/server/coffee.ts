@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
+import { assertAdmin, isAdminUnlocked, isCustomerUnlocked } from "./auth.server"
 import { db } from "@/db/client"
 import {
   coffees,
@@ -10,7 +11,6 @@ import {
   rounds,
   suppliers,
 } from "@/db/schema"
-import { assertAdmin, isAdminUnlocked, isCustomerUnlocked } from "./auth"
 
 const uuidSchema = z.string().uuid()
 const imageUrlSchema = z
@@ -64,7 +64,7 @@ async function getOpenRoundRecord() {
     .from(rounds)
     .where(eq(rounds.status, "open"))
     .limit(1)
-  return round ?? null
+  return round
 }
 
 function groupBy<T, K>(items: Array<T>, getKey: (item: T) => K) {

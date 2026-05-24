@@ -5,7 +5,7 @@ import { BRAND_NAME, FilterEngravedMark } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr, parseKroner } from "@/lib/money"
 import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
-import { unlockAdmin } from "@/server/auth"
+import { unlockAdmin } from "@/server/auth.functions"
 import {
   addCoffee,
   archiveCoffee,
