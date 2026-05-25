@@ -97,6 +97,22 @@ export const roundCoffees = pgTable(
   })
 )
 
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    email: text("email").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => ({
+    nameIdx: index("customers_name_idx").on(table.name),
+    emailIdx: index("customers_email_idx").on(table.email),
+  })
+)
+
 export const orders = pgTable(
   "orders",
   {
@@ -104,8 +120,12 @@ export const orders = pgTable(
     roundId: uuid("round_id")
       .notNull()
       .references(() => rounds.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, {
+      onDelete: "restrict",
+    }),
     customerName: text("customer_name").notNull(),
     customerPhone: text("customer_phone"),
+    customerEmail: text("customer_email"),
     paid: boolean("paid").notNull().default(false),
     collected: boolean("collected").notNull().default(false),
     ...timestamps,
@@ -173,8 +193,16 @@ export const roundCoffeesRelations = relations(
   })
 )
 
+export const customersRelations = relations(customers, ({ many }) => ({
+  orders: many(orders),
+}))
+
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   round: one(rounds, { fields: [orders.roundId], references: [rounds.id] }),
+  customer: one(customers, {
+    fields: [orders.customerId],
+    references: [customers.id],
+  }),
   items: many(orderItems),
 }))
 

@@ -5,6 +5,7 @@ import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr, parseKroner } from "@/lib/money"
 import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
+import { addCoffeeVat } from "@/lib/vat"
 import { unlockAdmin } from "@/server/auth.functions"
 import {
   addCoffee,
@@ -142,6 +143,7 @@ function DashboardView({
           <CatalogSection dashboard={dashboard} refresh={refresh} />
         )}
         <HistorySection rounds={dashboard.closedRounds} refresh={refresh} />
+        <CustomersSection customers={dashboard.customers} />
       </div>
       <StatusRail dashboard={dashboard} />
     </div>
@@ -627,7 +629,7 @@ function OpenRoundSection({
                   loading="lazy"
                 />
               ) : null}
-              {coffee.nameSnapshot} {formatKr(coffee.priceKrSnapshot)}
+              {coffee.nameSnapshot} {formatKr(addCoffeeVat(coffee.priceKrSnapshot))}
             </span>
           ))}
         </div>
@@ -721,7 +723,7 @@ function OrderList({
             <ul className="space-y-1 text-sm text-muted-foreground">
               {order.items.map((item) => (
                 <li key={`${order.id}-${item.name}`}>
-                  {item.quantity} × {item.name} {formatKr(item.priceKr)}
+                  {item.quantity} × {item.name} {formatKr(addCoffeeVat(item.priceKr))}
                 </li>
               ))}
             </ul>
@@ -740,6 +742,51 @@ function OrderList({
         </article>
       ))}
     </div>
+  )
+}
+
+function CustomersSection({ customers }: { customers: Dashboard["customers"] }) {
+  return (
+    <section className="rounded-lg border border-(--ledger-line) bg-card">
+      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+        <SectionTitle
+          kicker="04"
+          title="Kunder"
+          subtitle="Registrerte personer i bestillingsrommet."
+        />
+        <span className="font-mono text-xs text-muted-foreground">
+          {customers.length} personer
+        </span>
+      </div>
+      <div className="overflow-hidden">
+        {customers.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            Ingen registrerte personer ennå.
+          </p>
+        ) : null}
+        {customers.map((customer) => (
+          <div
+            key={customer.id}
+            className="grid gap-2 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_9rem_1fr_auto] sm:items-center"
+          >
+            <div>
+              <p className="font-medium">{customer.name}</p>
+              <p className="font-mono text-xs text-muted-foreground">
+                Registrert {formatDate(customer.createdAt)}
+              </p>
+            </div>
+            <p className="font-mono text-sm">{customer.phone}</p>
+            <p className="truncate font-mono text-sm text-muted-foreground">
+              {customer.email}
+            </p>
+            <StatusPill
+              active={customer.isActive}
+              label={customer.isActive ? "Aktiv" : "Inaktiv"}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

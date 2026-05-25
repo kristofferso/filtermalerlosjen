@@ -1,9 +1,16 @@
 import "@tanstack/react-start/server-only"
-import { getCookie, setCookie } from "@tanstack/react-start/server"
-import { createSessionToken, requireEnv, verifySessionToken } from "@/lib/auth"
+import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server"
+import {
+  createCustomerToken,
+  createSessionToken,
+  requireEnv,
+  verifyCustomerToken,
+  verifySessionToken,
+} from "@/lib/auth"
 
 export const CUSTOMER_COOKIE = "kk_customer_session"
 export const ADMIN_COOKIE = "kk_admin_session"
+export const SELECTED_CUSTOMER_COOKIE = "kk_selected_customer"
 
 const WRONG_PASSWORD_ERROR =
   "Det er ikke det hemmelige ordet! Er du med i losjen??"
@@ -54,6 +61,28 @@ export async function isCustomerUnlocked() {
   return verifySessionToken({
     token: getCookie(CUSTOMER_COOKIE),
     purpose: "customer",
+    secret: requireEnv("SESSION_SECRET"),
+  })
+}
+
+export async function selectCustomerSession(customerId: string) {
+  setCookie(
+    SELECTED_CUSTOMER_COOKIE,
+    await createCustomerToken({
+      customerId,
+      secret: requireEnv("SESSION_SECRET"),
+    }),
+    sessionCookieOptions
+  )
+}
+
+export function clearSelectedCustomerSession() {
+  deleteCookie(SELECTED_CUSTOMER_COOKIE, { path: "/" })
+}
+
+export async function getSelectedCustomerId() {
+  return verifyCustomerToken({
+    token: getCookie(SELECTED_CUSTOMER_COOKIE),
     secret: requireEnv("SESSION_SECRET"),
   })
 }

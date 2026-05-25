@@ -1,13 +1,21 @@
 import { createServerFn } from "@tanstack/react-start"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
-import { assertAdmin, isAdminUnlocked, isCustomerUnlocked } from "./auth.server"
+import {
+  assertAdmin,
+  clearSelectedCustomerSession,
+  getSelectedCustomerId,
+  isAdminUnlocked,
+  isCustomerUnlocked,
+  selectCustomerSession,
+} from "./auth.server"
 import { db } from "@/db/client"
 import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 import { calculateRoundTotals } from "@/lib/order-totals"
 import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
 import {
   coffees,
+  customers,
   orderItems,
   orders,
   roundCoffees,
@@ -47,10 +55,14 @@ const customerPhoneSchema = z
   .string()
   .trim()
   .regex(EIGHT_DIGIT_PHONE_PATTERN, "Telefonnummer må være 8 siffer")
+const customerInputSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  phone: customerPhoneSchema,
+  email: z.string().trim().email().max(120),
+})
+const selectCustomerSchema = z.object({ customerId: uuidSchema })
 const submitOrderSchema = z.object({
   roundId: uuidSchema,
-  customerName: z.string().trim().min(1).max(80),
-  customerPhone: customerPhoneSchema,
   items: z.array(
     z.object({
       roundCoffeeId: uuidSchema,
@@ -84,6 +96,26 @@ function groupBy<T, TKey>(items: Array<T>, getKey: (item: T) => TKey) {
   return grouped
 }
 
+async function getActiveCustomers() {
+  return db
+    .select()
+    .from(customers)
+    .where(eq(customers.isActive, true))
+    .orderBy(customers.name)
+}
+
+async function getSelectedCustomer() {
+  const customerId = await getSelectedCustomerId()
+  if (!customerId) return null
+
+  const customerRows = await db
+    .select()
+    .from(customers)
+    .where(and(eq(customers.id, customerId), eq(customers.isActive, true)))
+    .limit(1)
+  return customerRows.at(0) ?? null
+}
+
 async function getOrderSummaries(roundIds: Array<string>) {
   if (roundIds.length === 0) return []
 
@@ -106,6 +138,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
       roundId: string
       customerName: string
       customerPhone: string | null
+      customerEmail: string | null
       paid: boolean
       collected: boolean
       createdAt: Date
@@ -126,6 +159,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
         roundId: row.order.roundId,
         customerName: row.order.customerName,
         customerPhone: row.order.customerPhone,
+        customerEmail: row.order.customerEmail,
         paid: row.order.paid,
         collected: row.order.collected,
         createdAt: row.order.createdAt,
@@ -151,8 +185,18 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await isCustomerUnlocked())) return { unlocked: false as const }
 
-    const openRound = await getOpenRoundRecord()
-    if (!openRound) return { unlocked: true as const, openRound: null }
+    const [openRound, customerRows, selectedCustomer] = await Promise.all([
+      getOpenRoundRecord(),
+      getActiveCustomers(),
+      getSelectedCustomer(),
+    ])
+    if (!openRound)
+      return {
+        unlocked: true as const,
+        openRound: null,
+        customers: customerRows,
+        selectedCustomer,
+      }
 
     const supplierRows = await db
       .select()
@@ -188,6 +232,8 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
         })),
         orders: orderRows,
       },
+      customers: customerRows,
+      selectedCustomer,
     }
   }
 )
@@ -196,7 +242,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await isAdminUnlocked())) return { unlocked: false as const }
 
-    const [supplierRows, coffeeRows, openRound, closedRoundRows] =
+    const [supplierRows, coffeeRows, customerRows, openRound, closedRoundRows] =
       await Promise.all([
         db.select().from(suppliers).orderBy(suppliers.name),
         db
@@ -204,6 +250,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
           .from(coffees)
           .where(eq(coffees.isDeleted, false))
           .orderBy(desc(coffees.createdAt)),
+        db.select().from(customers).orderBy(customers.name),
         getOpenRoundRecord(),
         db
           .select()
@@ -241,6 +288,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
       unlocked: true as const,
       suppliers: supplierRows,
       coffees: coffeeRows,
+      customers: customerRows,
       openRound: openRound
         ? {
             ...openRound,
@@ -365,11 +413,50 @@ export const closeRound = createServerFn({ method: "POST" })
     return round
   })
 
+export const registerCustomer = createServerFn({ method: "POST" })
+  .inputValidator((input) => customerInputSchema.parse(input))
+  .handler(async ({ data }) => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const [customer] = await db.insert(customers).values(data).returning()
+    await selectCustomerSession(customer.id)
+    return customer
+  })
+
+export const selectCustomer = createServerFn({ method: "POST" })
+  .inputValidator((input) => selectCustomerSchema.parse(input))
+  .handler(async ({ data }) => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const customerRows = await db
+      .select()
+      .from(customers)
+      .where(and(eq(customers.id, data.customerId), eq(customers.isActive, true)))
+      .limit(1)
+    const customer = customerRows.at(0)
+    if (!customer) throw new Error("Customer not found")
+
+    await selectCustomerSession(customer.id)
+    return customer
+  })
+
+export const logoutCustomer = createServerFn({ method: "POST" }).handler(
+  async () => {
+    await clearSelectedCustomerSession()
+    return { ok: true }
+  }
+)
+
 export const submitOrder = createServerFn({ method: "POST" })
   .inputValidator((input) => submitOrderSchema.parse(input))
   .handler(async ({ data }) => {
     if (!(await isCustomerUnlocked()))
       throw new Error("Customer access required")
+
+    const selectedCustomer = await getSelectedCustomer()
+    if (!selectedCustomer) throw new Error("Velg hvem som bestiller")
 
     const items = data.items.filter((item) => item.quantity > 0)
     if (items.length === 0) throw new Error("Choose at least one coffee")
@@ -402,8 +489,10 @@ export const submitOrder = createServerFn({ method: "POST" })
       .insert(orders)
       .values({
         roundId: data.roundId,
-        customerName: data.customerName,
-        customerPhone: data.customerPhone,
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        customerEmail: selectedCustomer.email,
       })
       .returning()
     const byId = new Map(roundCoffeeRows.map((coffee) => [coffee.id, coffee]))
@@ -463,6 +552,7 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
       items: total.items,
       bagCount: total.items.reduce((sum, item) => sum + item.quantity, 0),
       coffeeSubtotalKr: total.coffeeSubtotalKr,
+      coffeeVatKr: total.coffeeVatKr,
       shippingShareKr: total.shippingShareKr,
       totalKr: total.totalKr,
       vippsUrl,

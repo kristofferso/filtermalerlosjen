@@ -5,8 +5,15 @@ import { CustomerPasswordLanding } from "@/components/customer-lock"
 import { Button } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
 import { calculateOrderLeaderboard } from "@/lib/order-totals"
+import { addCoffeeVat, calculateCoffeeVat } from "@/lib/vat"
 import { unlockCustomer } from "@/server/auth.functions"
-import { getCustomerHomeData, submitOrder } from "@/server/coffee"
+import {
+  getCustomerHomeData,
+  logoutCustomer,
+  registerCustomer,
+  selectCustomer,
+  submitOrder,
+} from "@/server/coffee"
 
 export const Route = createFileRoute("/")({
   loader: () => getCustomerHomeData(),
@@ -28,24 +35,204 @@ function CustomerPage() {
   return (
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
-        <AppHeader title={BRAND_NAME} />
+        <AppHeader
+          title={BRAND_NAME}
+          selectedCustomer={data.selectedCustomer}
+          onLogout={async () => {
+            await logoutCustomer()
+            await router.invalidate()
+          }}
+        />
 
-        {!data.openRound ? <EmptyState /> : null}
-        {data.openRound ? <OrderForm openRound={data.openRound} /> : null}
+        {!data.selectedCustomer ? (
+          <CustomerIdentityPanel
+            customers={data.customers}
+            refresh={() => router.invalidate()}
+          />
+        ) : null}
+        {data.selectedCustomer && !data.openRound ? <EmptyState /> : null}
+        {data.selectedCustomer && data.openRound ? (
+          <OrderForm
+            openRound={data.openRound}
+            selectedCustomer={data.selectedCustomer}
+          />
+        ) : null}
       </div>
     </main>
   )
 }
 
-function AppHeader({ title }: { title: string }) {
+type CustomerData = Extract<
+  Awaited<ReturnType<typeof getCustomerHomeData>>,
+  { unlocked: true }
+>
+
+function AppHeader({
+  title,
+  selectedCustomer,
+  onLogout,
+}: {
+  title: string
+  selectedCustomer?: CustomerData["selectedCustomer"]
+  onLogout?: () => Promise<void>
+}) {
   return (
-    <header className="flex items-center border-b border-(--ledger-line) py-4">
+    <header className="flex items-center justify-between gap-4 border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
         <h1 className="font-serif text-3xl font-normal tracking-tight sm:text-4xl">
           {title}
         </h1>
       </div>
+      {selectedCustomer ? (
+        <div className="flex items-center gap-3 text-right">
+          <div className="hidden sm:block">
+            <p className="text-sm font-medium">{selectedCustomer.name}</p>
+            <p className="font-mono text-xs text-muted-foreground">
+              {selectedCustomer.email}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" type="button" onClick={onLogout}>
+            Logg ut
+          </Button>
+        </div>
+      ) : null}
     </header>
+  )
+}
+
+function CustomerIdentityPanel({
+  customers,
+  refresh,
+}: {
+  customers: CustomerData["customers"]
+  refresh: () => Promise<void>
+}) {
+  const [selectedCustomerId, setSelectedCustomerId] = useState(
+    customers[0]?.id ?? ""
+  )
+  const [name, setName] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [error, setError] = useState("")
+
+  async function handleSelect(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedCustomerId) return
+    setError("")
+    try {
+      await selectCustomer({ data: { customerId: selectedCustomerId } })
+      await refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Kunne ikke velge person")
+    }
+  }
+
+  async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    try {
+      await registerCustomer({ data: { name, phone, email } })
+      await refresh()
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Kunne ikke registrere person"
+      )
+    }
+  }
+
+  return (
+    <section className="grid gap-5 lg:grid-cols-2">
+      <form
+        onSubmit={handleSelect}
+        className="rounded-lg border border-[var(--ledger-line)] bg-card p-5"
+      >
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          PERSON
+        </p>
+        <h2 className="mt-2 text-2xl tracking-tight">Velg eksisterende</h2>
+        <label className="mt-5 block space-y-2">
+          <span className="text-sm font-medium">Hvem bestiller?</span>
+          <select
+            className="h-10 w-full rounded-md border border-input py-0 pr-10 pl-3 text-sm outline-none focus-visible:border-ring"
+            value={selectedCustomerId}
+            onChange={(event) => setSelectedCustomerId(event.target.value)}
+          >
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button className="mt-5" type="submit" disabled={!selectedCustomerId}>
+          Fortsett
+        </Button>
+      </form>
+
+      <form
+        onSubmit={handleRegister}
+        className="rounded-lg border border-[var(--ledger-line)] bg-card p-5"
+      >
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          REGISTRER
+        </p>
+        <h2 className="mt-2 text-2xl tracking-tight">Ny person</h2>
+        <div className="mt-5 grid gap-3">
+          <TextField label="Navn" value={name} onChange={setName} autoComplete="name" />
+          <TextField
+            label="Telefonnummer"
+            value={phone}
+            onChange={setPhone}
+            autoComplete="tel-national"
+            inputMode="numeric"
+            pattern="[0-9]{8}"
+            maxLength={8}
+          />
+          <TextField
+            label="E-post"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            type="email"
+          />
+        </div>
+        <Button className="mt-5" type="submit">
+          Registrer og fortsett
+        </Button>
+      </form>
+      {error ? (
+        <p className="text-sm text-destructive lg:col-span-2" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  ...inputProps
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  type?: string
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value">) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-medium">{label}</span>
+      <input
+        className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required
+        {...inputProps}
+      />
+    </label>
   )
 }
 
@@ -101,11 +288,15 @@ type OpenRound = NonNullable<
   >["openRound"]
 >
 
-function OrderForm({ openRound }: { openRound: OpenRound }) {
+function OrderForm({
+  openRound,
+  selectedCustomer,
+}: {
+  openRound: OpenRound
+  selectedCustomer: NonNullable<CustomerData["selectedCustomer"]>
+}) {
   const router = useRouter()
   const [quantities, setQuantities] = useState<Record<string, number>>({})
-  const [customerName, setCustomerName] = useState("")
-  const [customerPhone, setCustomerPhone] = useState("")
   const [error, setError] = useState("")
   const [confirmation, setConfirmation] = useState<{
     bagCount: number
@@ -120,7 +311,17 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
   const subtotalKr = useMemo(
     () =>
       openRound.coffees.reduce(
-        (sum, coffee) => sum + (quantities[coffee.id] ?? 0) * coffee.priceKr,
+        (sum, coffee) =>
+          sum + addCoffeeVat((quantities[coffee.id] ?? 0) * coffee.priceKr),
+        0
+      ),
+    [openRound.coffees, quantities]
+  )
+  const vatKr = useMemo(
+    () =>
+      openRound.coffees.reduce(
+        (sum, coffee) =>
+          sum + calculateCoffeeVat((quantities[coffee.id] ?? 0) * coffee.priceKr),
         0
       ),
     [openRound.coffees, quantities]
@@ -139,8 +340,6 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
       await submitOrder({
         data: {
           roundId: openRound.id,
-          customerName,
-          customerPhone,
           items: openRound.coffees.map((coffee) => ({
             roundCoffeeId: coffee.id,
             quantity: quantities[coffee.id] ?? 0,
@@ -149,8 +348,6 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
       })
       setConfirmation({ bagCount, subtotalKr })
       setQuantities({})
-      setCustomerName("")
-      setCustomerPhone("")
       await router.invalidate()
     } catch (cause) {
       setError(
@@ -208,7 +405,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
                       </p>
                     ) : null}
                     <p className="mt-1 font-mono text-sm">
-                      {formatKr(coffee.priceKr)}
+                      {formatKr(addCoffeeVat(coffee.priceKr))}
                     </p>
                   </div>
                 </div>
@@ -266,34 +463,22 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 border-b border-border pb-4">
                 <SummaryCell label="Poser" value={bagCount} />
-                <SummaryCell label="Sum" value={formatKr(subtotalKr)} />
+                <div>
+                  <SummaryCell label="Sum" value={formatKr(subtotalKr)} />
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    Mva (15%): {formatKr(vatKr)}
+                  </p>
+                </div>
               </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Ditt navn</span>
-                <input
-                  className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                  value={customerName}
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Telefonnummer</span>
-                <input
-                  className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[0-9]{8}"
-                  minLength={8}
-                  maxLength={8}
-                  title="Skriv inn 8 siffer"
-                  value={customerPhone}
-                  onChange={(event) => setCustomerPhone(event.target.value)}
-                  autoComplete="tel-national"
-                  required
-                />
-              </label>
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <p className="font-mono text-[0.65rem] tracking-[0.16em] text-muted-foreground uppercase">
+                  Bestiller som
+                </p>
+                <p className="mt-1 font-medium">{selectedCustomer.name}</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {selectedCustomer.email} · {selectedCustomer.phone}
+                </p>
+              </div>
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}
@@ -301,12 +486,7 @@ function OrderForm({ openRound }: { openRound: OpenRound }) {
                 className="w-full"
                 size="lg"
                 type="submit"
-                disabled={
-                  isSubmitting ||
-                  bagCount === 0 ||
-                  !customerName.trim() ||
-                  !customerPhone.trim()
-                }
+                disabled={isSubmitting || bagCount === 0}
               >
                 {isSubmitting ? "Sender" : "Send bestilling"}
               </Button>

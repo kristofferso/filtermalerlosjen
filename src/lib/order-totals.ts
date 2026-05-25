@@ -1,3 +1,5 @@
+import { addCoffeeVat, calculateCoffeeVat } from "./vat"
+
 export type RoundTotalsInput = {
   shippingKr: number
   orders: Array<{
@@ -25,6 +27,7 @@ export type OrderTotal = {
   orderId: string
   customerName: string
   coffeeSubtotalKr: number
+  coffeeVatKr: number
   shippingShareKr: number
   totalKr: number
   paid: boolean
@@ -55,7 +58,7 @@ export function calculateOrderLeaderboard(
         0
       )
       const totalKr = order.items.reduce(
-        (sum, item) => sum + Math.max(0, item.quantity) * item.priceKr,
+        (sum, item) => sum + addCoffeeVat(Math.max(0, item.quantity) * item.priceKr),
         0
       )
 
@@ -86,7 +89,7 @@ export function calculateCoffeeTotals(orders: RoundTotalsInput["orders"]): Array
         ...existing,
         imageUrl: existing.imageUrl || item.imageUrl || "",
         quantity: existing.quantity + item.quantity,
-        totalKr: existing.totalKr + item.quantity * item.priceKr,
+        totalKr: existing.totalKr + addCoffeeVat(item.quantity * item.priceKr),
       })
     }
   }
@@ -103,15 +106,20 @@ export function calculateRoundTotals(input: RoundTotalsInput): Array<OrderTotal>
   return input.orders.map((order, index) => {
     const items = order.items.map((item) => ({
       ...item,
-      subtotalKr: item.quantity * item.priceKr,
+      subtotalKr: addCoffeeVat(item.quantity * item.priceKr),
     }))
     const coffeeSubtotalKr = items.reduce((sum, item) => sum + item.subtotalKr, 0)
+    const coffeeVatKr = order.items.reduce(
+      (sum, item) => sum + calculateCoffeeVat(item.quantity * item.priceKr),
+      0
+    )
     const shippingShareKr = baseShippingShare + (index < remainder ? 1 : 0)
 
     return {
       orderId: order.id,
       customerName: order.customerName,
       coffeeSubtotalKr,
+      coffeeVatKr,
       shippingShareKr,
       totalKr: coffeeSubtotalKr + shippingShareKr,
       paid: order.paid,
