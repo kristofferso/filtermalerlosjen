@@ -60,6 +60,7 @@ export const rounds = pgTable(
     status: roundStatus("status").notNull().default("draft"),
     shippingKr: integer("shipping_kr").notNull().default(0),
     openedAt: timestamp("opened_at", { withTimezone: true }),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     ...timestamps,
   },

@@ -413,6 +413,11 @@ function OrderForm({
           <p className="mt-2 text-sm text-muted-foreground">
             Frakt deles likt mellom alle som bestiller.
           </p>
+          {openRound.closesAt ? (
+            <p className="mt-3 inline-flex rounded-md border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs text-muted-foreground">
+              {formatClosingText(openRound.closesAt)}
+            </p>
+          ) : null}
         </div>
 
         <div className="divide-y divide-border">
@@ -536,6 +541,24 @@ function OrderForm({
       </aside>
     </form>
   )
+}
+
+function formatClosingText(value: Date | string) {
+  const closesAt = new Date(value)
+  const milliseconds = closesAt.getTime() - Date.now()
+
+  if (!Number.isFinite(milliseconds)) return "Stenger snart"
+  if (milliseconds <= 0) return "Stenger nå"
+
+  const totalHours = Math.ceil(milliseconds / (1000 * 60 * 60))
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  const parts: Array<string> = []
+
+  if (days > 0) parts.push(`${days} ${days === 1 ? "dag" : "dager"}`)
+  if (hours > 0) parts.push(`${hours} ${hours === 1 ? "time" : "timer"}`)
+
+  return `Stenger om ${parts.join(" og ")}`
 }
 
 function OrderLeaderboard({ orders }: { orders: OpenRound["orders"] }) {

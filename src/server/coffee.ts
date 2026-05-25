@@ -46,6 +46,7 @@ const updateCoffeeSchema = addCoffeeSchema.extend({
 const openRoundSchema = z.object({
   supplierId: uuidSchema,
   coffeeIds: z.array(uuidSchema).min(1),
+  closesAt: z.string().datetime().nullable().optional(),
 })
 const closeRoundSchema = z.object({
   roundId: uuidSchema,
@@ -222,6 +223,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
       unlocked: true as const,
       openRound: {
         id: openRound.id,
+        closesAt: openRound.closesAt,
         supplier: { id: supplier.id, name: supplier.name },
         coffees: selectedCoffees.map(({ roundCoffee, coffee }) => ({
           id: roundCoffee.id,
@@ -378,6 +380,7 @@ export const openRound = createServerFn({ method: "POST" })
         supplierId: data.supplierId,
         status: "open",
         openedAt: new Date(),
+        closesAt: data.closesAt ? new Date(data.closesAt) : null,
       })
       .returning()
 

@@ -29,6 +29,13 @@
       "when": 1779691832959,
       "tag": "0003_boring_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779720617959,
+      "tag": "0004_special_cargill",
+      "breakpoints": true
     }
   ]
 }

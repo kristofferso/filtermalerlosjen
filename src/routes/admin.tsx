@@ -185,6 +185,7 @@ function CurrentRoundStats({ round }: { round: Dashboard["openRound"] }) {
         <RailMetric label="Ordre" value={orders.length} />
         <RailMetric label="Poser" value={bagCount} />
         <RailMetric label="Kaffe" value={round?.coffees.length ?? 0} />
+        <RailMetric label="Stenger" value={formatDate(round?.closesAt ?? null)} />
       </div>
     </section>
   )
@@ -262,6 +263,7 @@ function CatalogSection({
   const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
   const [showInactive, setShowInactive] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
+  const [closesAt, setClosesAt] = useState("")
   const selectedSupplier =
     dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
     dashboard.suppliers[0]
@@ -283,7 +285,11 @@ function CatalogSection({
 
   async function handleOpenRound() {
     await openRound({
-      data: { supplierId: selectedSupplier.id, coffeeIds: selectedIds },
+      data: {
+        supplierId: selectedSupplier.id,
+        coffeeIds: selectedIds,
+        closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+      },
     })
     await refresh()
   }
@@ -352,15 +358,26 @@ function CatalogSection({
           refresh={refresh}
         />
 
-        <Button
-          className="w-full"
-          size="lg"
-          disabled={selectedIds.length === 0}
-          onClick={handleOpenRound}
-          type="button"
-        >
-          Åpne runde med {selectedIds.length} kaffe
-        </Button>
+        <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Stenger (valgfritt)</span>
+            <input
+              className="h-10 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+              type="datetime-local"
+              value={closesAt}
+              onChange={(event) => setClosesAt(event.target.value)}
+            />
+          </label>
+          <Button
+            className="w-full sm:w-auto"
+            size="lg"
+            disabled={selectedIds.length === 0}
+            onClick={handleOpenRound}
+            type="button"
+          >
+            Åpne runde med {selectedIds.length} kaffe
+          </Button>
+        </div>
       </div>
     </section>
   )
