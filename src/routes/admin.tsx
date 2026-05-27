@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Check, Circle, Trash2 } from "lucide-react"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import { formatKr, parseKroner } from "@/lib/money"
-import { calculateCoffeeTotals, calculateRoundTotals } from "@/lib/order-totals"
+import {
+  calculateCoffeeTotals,
+  calculateRoundGrandTotals,
+  calculateRoundTotals,
+} from "@/lib/order-totals"
 import { addCoffeeVat } from "@/lib/vat"
 import { unlockAdmin } from "@/server/auth.functions"
 import {
@@ -13,9 +17,12 @@ import {
   closeRound,
   deleteOrder,
   getAdminDashboard,
+  markRoundReadyForPickup,
   openRound,
   updateCoffee,
   updateOrderFlags,
+  updateRoundClosesAt,
+  updateRoundShipping,
 } from "@/server/coffee"
 
 export const Route = createFileRoute("/admin")({
@@ -185,7 +192,10 @@ function CurrentRoundStats({ round }: { round: Dashboard["openRound"] }) {
         <RailMetric label="Ordre" value={orders.length} />
         <RailMetric label="Poser" value={bagCount} />
         <RailMetric label="Kaffe" value={round?.coffees.length ?? 0} />
-        <RailMetric label="Stenger" value={formatDate(round?.closesAt ?? null)} />
+        <RailMetric
+          label="Stenger"
+          value={formatDate(round?.closesAt ?? null)}
+        />
       </div>
     </section>
   )
@@ -612,12 +622,23 @@ function OpenRoundSection({
   round: NonNullable<Dashboard["openRound"]>
   refresh: () => Promise<void>
 }) {
-  const [shipping, setShipping] = useState("0")
+  const [closesAt, setClosesAt] = useState(formatDateTimeLocal(round.closesAt))
+  const [deadlineSaved, setDeadlineSaved] = useState(false)
+
+  async function handleSaveClosesAt() {
+    await updateRoundClosesAt({
+      data: {
+        roundId: round.id,
+        closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+      },
+    })
+    setDeadlineSaved(true)
+    window.setTimeout(() => setDeadlineSaved(false), 1800)
+    await refresh()
+  }
 
   async function handleClose() {
-    await closeRound({
-      data: { roundId: round.id, shippingKr: parseKroner(shipping) },
-    })
+    await closeRound({ data: { roundId: round.id } })
     await refresh()
   }
 
@@ -632,39 +653,33 @@ function OpenRoundSection({
         <StatusPill active label="Aktiv" />
       </div>
       <div className="space-y-4 p-4 sm:p-5">
-        <div className="flex flex-wrap gap-2">
-          {round.coffees.map((coffee) => (
-            <span
-              key={coffee.id}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-2.5 py-1 font-mono text-xs"
-            >
-              {coffee.imageUrlSnapshot ? (
-                <img
-                  className="size-5 rounded object-cover"
-                  src={coffee.imageUrlSnapshot}
-                  alt=""
-                  loading="lazy"
-                />
-              ) : null}
-              {coffee.nameSnapshot} {formatKr(addCoffeeVat(coffee.priceKrSnapshot))}
-            </span>
-          ))}
-        </div>
+        <ActiveCoffeesSummary coffees={round.coffees} />
+        <RoundGrandMetrics shippingKr={0} orders={round.orders} />
         <BulkCoffeeTotals orders={round.orders} />
         <OrderList orders={round.orders} refresh={refresh} />
-        <div className="grid gap-3 rounded-lg border border-border bg-muted/40 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="space-y-1">
-            <span className="text-sm font-medium">Frakt i kroner</span>
+            <span className="text-sm font-medium">Stenger (valgfritt)</span>
             <input
-              className="h-9 w-full rounded-md border border-input px-3 font-mono outline-none focus-visible:border-ring"
-              inputMode="numeric"
-              pattern="\d*"
-              value={shipping}
-              onChange={(event) =>
-                setShipping(event.target.value.replace(/\D/g, ""))
-              }
+              className="h-9 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring"
+              type="datetime-local"
+              value={closesAt}
+              onChange={(event) => setClosesAt(event.target.value)}
             />
           </label>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={handleSaveClosesAt}
+          >
+            {deadlineSaved ? "Lagret" : "Lagre stenging"}
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
+          <p className="text-sm text-muted-foreground">
+            Lukk når ekstern bestilling er sendt. Frakt kan settes senere i
+            oppgjør.
+          </p>
           <Button type="button" onClick={handleClose}>
             Lukk runde
           </Button>
@@ -674,15 +689,75 @@ function OpenRoundSection({
   )
 }
 
-function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
-  const totals = calculateCoffeeTotals(orders)
-  if (totals.length === 0) return null
+function ActiveCoffeesSummary({
+  coffees,
+}: {
+  coffees: NonNullable<Dashboard["openRound"]>["coffees"]
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-muted/20 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs tracking-[0.16em] text-muted-foreground uppercase">
+          Aktiv kaffe
+        </span>
+        {coffees.map((coffee) => (
+          <span
+            key={coffee.id}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card/70 px-2 py-1 font-mono text-xs text-muted-foreground"
+          >
+            {coffee.nameSnapshot}{" "}
+            {formatKr(addCoffeeVat(coffee.priceKrSnapshot))}
+          </span>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function RoundGrandMetrics({
+  shippingKr,
+  orders,
+}: {
+  shippingKr: number
+  orders: Round["orders"]
+}) {
+  const totals = calculateRoundGrandTotals({ shippingKr, orders })
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <RailMetric label="Total poser" value={totals.bagCount} />
+      <RailMetric
+        label="Kaffe totalt"
+        value={formatKr(totals.coffeeSubtotalKr)}
+      />
+      <RailMetric label="Sum totalt" value={formatKr(totals.totalKr)} />
+    </div>
+  )
+}
+
+type CoffeeQuantityItem = {
+  name: string
+  imageUrl?: string
+  quantity: number
+}
+
+function CoffeeQuantitySection({
+  title,
+  items,
+  compact = false,
+}: {
+  title: string
+  items: Array<CoffeeQuantityItem>
+  compact?: boolean
+}) {
+  const visibleItems = items.filter((item) => item.quantity > 0)
+  if (visibleItems.length === 0) return null
 
   return (
     <section className="rounded-lg border border-border bg-muted/30 p-3">
-      <h3 className="text-lg">Samlet ordre</h3>
+      <h3 className={compact ? "text-base" : "text-lg"}>{title}</h3>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {totals.map((coffee) => (
+        {visibleItems.map((coffee) => (
           <div
             key={coffee.name}
             className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-border bg-card p-2 text-sm"
@@ -695,16 +770,25 @@ function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
                   alt=""
                   loading="lazy"
                 />
-              ) : null}
+              ) : (
+                <span className="size-8 shrink-0 rounded border border-border bg-muted" />
+              )}
               <span className="truncate font-medium">{coffee.name}</span>
             </span>
-            <span className="shrink-0 font-mono">
-              {coffee.quantity} poser {formatKr(coffee.totalKr)}
-            </span>
+            <span className="shrink-0 font-mono">{coffee.quantity} poser</span>
           </div>
         ))}
       </div>
     </section>
+  )
+}
+
+function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
+  return (
+    <CoffeeQuantitySection
+      title="Samlet ordre"
+      items={calculateCoffeeTotals(orders)}
+    />
   )
 }
 
@@ -722,47 +806,69 @@ function OrderList({
       </p>
     )
 
+  const totalsByOrderId = new Map(
+    calculateRoundTotals({ shippingKr: 0, orders }).map((total) => [
+      total.orderId,
+      total,
+    ])
+  )
+
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {orders.map((order) => (
-        <article
-          key={order.id}
-          className="border-b border-border p-3 last:border-b-0"
-        >
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-start">
-            <div>
-              <h3 className="text-lg">{order.customerName}</h3>
-              <p className="font-mono text-sm text-muted-foreground">
-                {order.items.reduce((sum, item) => sum + item.quantity, 0)}{" "}
-                poser
-              </p>
+      {orders.map((order) => {
+        const total = totalsByOrderId.get(order.id)
+        const bagCount =
+          total?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
+
+        return (
+          <article
+            key={order.id}
+            className="border-b border-border p-3 last:border-b-0"
+          >
+            <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
+              <div>
+                <h3 className="text-lg">{order.customerName}</h3>
+                <p className="font-mono text-sm text-muted-foreground">
+                  {bagCount} poser · {formatKr(total?.totalKr ?? 0)}
+                </p>
+              </div>
+              <ul className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                {order.items.map((item) => (
+                  <li
+                    key={`${order.id}-${item.name}`}
+                    className="rounded-md border border-border bg-muted/30 px-2 py-1"
+                  >
+                    <span className="font-mono text-foreground">
+                      {item.quantity} ×
+                    </span>{" "}
+                    {item.name}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="destructive"
+                size="xs"
+                type="button"
+                onClick={async () => {
+                  await deleteOrder({ data: { orderId: order.id } })
+                  await refresh()
+                }}
+              >
+                Slett
+              </Button>
             </div>
-            <ul className="space-y-1 text-sm text-muted-foreground">
-              {order.items.map((item) => (
-                <li key={`${order.id}-${item.name}`}>
-                  {item.quantity} × {item.name} {formatKr(addCoffeeVat(item.priceKr))}
-                </li>
-              ))}
-            </ul>
-            <Button
-              variant="destructive"
-              size="xs"
-              type="button"
-              onClick={async () => {
-                await deleteOrder({ data: { orderId: order.id } })
-                await refresh()
-              }}
-            >
-              Slett
-            </Button>
-          </div>
-        </article>
-      ))}
+          </article>
+        )
+      })}
     </div>
   )
 }
 
-function CustomersSection({ customers }: { customers: Dashboard["customers"] }) {
+function CustomersSection({
+  customers,
+}: {
+  customers: Dashboard["customers"]
+}) {
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
@@ -865,25 +971,62 @@ function ClosedRoundSummary({
   round: Dashboard["closedRounds"][number]
   refresh: () => Promise<void>
 }) {
+  const [shipping, setShipping] = useState(String(round.shippingKr))
+  const [shippingSaved, setShippingSaved] = useState(false)
   const totals = calculateRoundTotals({
     shippingKr: round.shippingKr,
     orders: round.orders,
   })
-  const pickupRows = useMemo(
-    () =>
-      round.orders.map((order) => ({
-        order,
-        items: order.items.filter((item) => item.quantity > 0),
-      })),
-    [round.orders]
-  )
+  const isReady = round.status === "ready"
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:grid-cols-4">
+        <Meta label="Status" value={isReady ? "Klar for henting" : "På vei"} />
         <Meta label="Leverandør" value={round.supplier?.name ?? "Ukjent"} />
         <Meta label="Åpnet" value={formatDate(round.openedAt)} />
         <Meta label="Frakt" value={formatKr(round.shippingKr)} />
+      </div>
+
+      <RoundGrandMetrics shippingKr={round.shippingKr} orders={round.orders} />
+
+      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Frakt i kroner</span>
+          <input
+            className="h-9 w-full rounded-md border border-input px-3 font-mono outline-none focus-visible:border-ring"
+            inputMode="numeric"
+            pattern="\d*"
+            value={shipping}
+            onChange={(event) =>
+              setShipping(event.target.value.replace(/\D/g, ""))
+            }
+          />
+        </label>
+        <Button
+          variant="secondary"
+          type="button"
+          onClick={async () => {
+            await updateRoundShipping({
+              data: { roundId: round.id, shippingKr: parseKroner(shipping) },
+            })
+            setShippingSaved(true)
+            window.setTimeout(() => setShippingSaved(false), 1800)
+            await refresh()
+          }}
+        >
+          {shippingSaved ? "Lagret" : "Lagre frakt"}
+        </Button>
+        <Button
+          type="button"
+          disabled={isReady}
+          onClick={async () => {
+            await markRoundReadyForPickup({ data: { roundId: round.id } })
+            await refresh()
+          }}
+        >
+          {isReady ? "Klar for henting" : "Merk klar for henting"}
+        </Button>
       </div>
 
       <BulkCoffeeTotals orders={round.orders} />
@@ -892,20 +1035,6 @@ function ClosedRoundSummary({
         {totals.map((total) => (
           <ClosedOrderRow key={total.orderId} total={total} refresh={refresh} />
         ))}
-      </div>
-
-      <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <h3 className="text-lg">Henteliste</h3>
-        <ul className="mt-2 space-y-2 text-sm">
-          {pickupRows.map(({ order, items }) => (
-            <li key={order.id}>
-              <strong>{order.customerName}:</strong>{" "}
-              {items
-                .map((item) => `${item.quantity} × ${item.name}`)
-                .join(", ")}
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   )
@@ -922,7 +1051,7 @@ function ClosedOrderRow({
   const [copied, setCopied] = useState(false)
 
   async function copyPaymentLink() {
-    const link = `${window.location.origin}/betaling/${total.orderId}`
+    const link = `${window.location.origin}/bestilling/${total.orderId}`
     await navigator.clipboard.writeText(link)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
@@ -953,13 +1082,11 @@ function ClosedOrderRow({
 
       {expanded ? (
         <div className="mt-3 border-t border-border pt-3">
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {total.items.map((item) => (
-              <li key={`${total.orderId}-${item.name}`}>
-                {item.quantity} × {item.name}: {formatKr(item.subtotalKr)}
-              </li>
-            ))}
-          </ul>
+          <CoffeeQuantitySection
+            title={`Hentes av ${total.customerName}`}
+            items={total.items}
+            compact
+          />
           <div className="mt-3 grid gap-1 font-mono text-sm">
             <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
             <p>Frakt: {formatKr(total.shippingShareKr)}</p>
@@ -1006,7 +1133,7 @@ function ClosedOrderRow({
               type="button"
               onClick={copyPaymentLink}
             >
-              {copied ? "Kopiert" : "Kopier betalingslenke"}
+              {copied ? "Kopiert" : "Kopier bestillingslenke"}
             </Button>
           </div>
         </div>
@@ -1093,4 +1220,13 @@ function formatDate(value: Date | string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value))
+}
+
+function formatDateTimeLocal(value: Date | string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ""
+
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return offsetDate.toISOString().slice(0, 16)
 }

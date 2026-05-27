@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { Check } from "lucide-react"
 import { BRAND_NAME } from "@/components/brand"
+import { OrderStatusStepper } from "@/components/order-status-stepper"
 import { buttonVariants } from "@/components/ui/button"
 import { formatKr } from "@/lib/money"
+import { getCustomerOrderStatus } from "@/lib/order-totals"
 import { getPaymentOrderData } from "@/server/coffee"
 
-export const Route = createFileRoute("/betaling/$orderId")({
+export const Route = createFileRoute("/bestilling/$orderId")({
   loader: ({ params }) =>
     getPaymentOrderData({ data: { orderId: params.orderId } }),
   component: PaymentPage,
@@ -28,13 +29,15 @@ function PaymentPage() {
             <p className="font-mono text-[0.7rem] tracking-[0.22em] text-muted-foreground uppercase">
               {BRAND_NAME}
             </p>
-            {order?.paid ? (
-              <div className="mx-auto my-5 grid size-14 place-items-center rounded-full bg-white/10 text-white">
-                <Check className="size-6" aria-hidden="true" />
-              </div>
-            ) : null}
             <h1 className="mt-3 font-serif text-4xl font-normal tracking-tight text-balance sm:text-5xl">
-              {order?.paid ? "Bestillingen er betalt" : "Betal for din bestilling"}
+              {order
+                ? getCustomerOrderStatus({
+                    roundStatus:
+                      order.roundStatus === "ready" ? "ready" : "closed",
+                    paid: order.paid,
+                    collected: order.collected,
+                  })
+                : "Din bestilling"}
             </h1>
           </div>
 
@@ -69,6 +72,14 @@ function PaymentCard({ order }: { order: PaymentOrder }) {
         <p className="font-mono text-sm text-muted-foreground">
           {order.bagCount} poser
         </p>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-border bg-muted/30 p-4">
+        <OrderStatusStepper
+          roundStatus={order.roundStatus === "ready" ? "ready" : "closed"}
+          paid={order.paid}
+          collected={order.collected}
+        />
       </div>
 
       <ul className="divide-y divide-border">

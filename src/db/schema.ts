@@ -11,7 +11,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core"
 
-export const roundStatus = pgEnum("round_status", ["draft", "open", "closed"])
+export const roundStatus = pgEnum("round_status", [
+  "draft",
+  "open",
+  "closed",
+  "ready",
+])
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })

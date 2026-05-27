@@ -1,0 +1,1 @@
+ALTER TYPE "public"."round_status" ADD VALUE 'ready';

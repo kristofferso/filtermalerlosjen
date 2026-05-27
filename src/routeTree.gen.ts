@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BetalingOrderIdRouteImport } from './routes/betaling.$orderId'
+import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
 
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
@@ -23,40 +23,40 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BetalingOrderIdRoute = BetalingOrderIdRouteImport.update({
-  id: '/betaling/$orderId',
-  path: '/betaling/$orderId',
+const BestillingOrderIdRoute = BestillingOrderIdRouteImport.update({
+  id: '/bestilling/$orderId',
+  path: '/bestilling/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/betaling/$orderId': typeof BetalingOrderIdRoute
+  '/bestilling/$orderId': typeof BestillingOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/betaling/$orderId': typeof BetalingOrderIdRoute
+  '/bestilling/$orderId': typeof BestillingOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/betaling/$orderId': typeof BetalingOrderIdRoute
+  '/bestilling/$orderId': typeof BestillingOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/betaling/$orderId'
+  fullPaths: '/' | '/admin' | '/bestilling/$orderId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/betaling/$orderId'
-  id: '__root__' | '/' | '/admin' | '/betaling/$orderId'
+  to: '/' | '/admin' | '/bestilling/$orderId'
+  id: '__root__' | '/' | '/admin' | '/bestilling/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
-  BetalingOrderIdRoute: typeof BetalingOrderIdRoute
+  BestillingOrderIdRoute: typeof BestillingOrderIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,11 +75,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/betaling/$orderId': {
-      id: '/betaling/$orderId'
-      path: '/betaling/$orderId'
-      fullPath: '/betaling/$orderId'
-      preLoaderRoute: typeof BetalingOrderIdRouteImport
+    '/bestilling/$orderId': {
+      id: '/bestilling/$orderId'
+      path: '/bestilling/$orderId'
+      fullPath: '/bestilling/$orderId'
+      preLoaderRoute: typeof BestillingOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -88,7 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
-  BetalingOrderIdRoute: BetalingOrderIdRoute,
+  BestillingOrderIdRoute: BestillingOrderIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -50,7 +50,16 @@ const openRoundSchema = z.object({
 })
 const closeRoundSchema = z.object({
   roundId: uuidSchema,
+  shippingKr: z.number().int().min(0).optional().default(0),
+})
+const updateRoundShippingSchema = z.object({
+  roundId: uuidSchema,
   shippingKr: z.number().int().min(0),
+})
+const markRoundReadySchema = z.object({ roundId: uuidSchema })
+const updateRoundClosesAtSchema = z.object({
+  roundId: uuidSchema,
+  closesAt: z.string().datetime().nullable().optional(),
 })
 const customerPhoneSchema = z
   .string()
@@ -182,6 +191,54 @@ async function getOrderSummaries(roundIds: Array<string>) {
   return Array.from(byOrder.values())
 }
 
+async function getLatestCustomerStatusOrder(customerId: string) {
+  const rows = await db
+    .select({ order: orders, round: rounds, supplier: suppliers })
+    .from(orders)
+    .innerJoin(rounds, eq(rounds.id, orders.roundId))
+    .innerJoin(suppliers, eq(suppliers.id, rounds.supplierId))
+    .where(
+      and(
+        eq(orders.customerId, customerId),
+        inArray(rounds.status, ["closed", "ready"])
+      )
+    )
+    .orderBy(desc(rounds.closedAt), desc(orders.createdAt))
+    .limit(1)
+
+  const row = rows.at(0)
+  if (!row) return null
+
+  const orderSummaries = await getOrderSummaries([row.round.id])
+  const orderSummary = orderSummaries.find(
+    (summary) => summary.id === row.order.id
+  )
+  if (!orderSummary) return null
+
+  const total = calculateRoundTotals({
+    shippingKr: row.round.shippingKr,
+    orders: orderSummaries,
+  }).find((summary) => summary.orderId === row.order.id)
+  if (!total) return null
+
+  return {
+    roundId: row.round.id,
+    roundStatus: row.round.status as "closed" | "ready",
+    supplier: { id: row.supplier.id, name: row.supplier.name },
+    closedAt: row.round.closedAt,
+    shippingKr: row.round.shippingKr,
+    orderId: total.orderId,
+    customerName: total.customerName,
+    paid: total.paid,
+    collected: total.collected,
+    items: total.items,
+    bagCount: total.items.reduce((sum, item) => sum + item.quantity, 0),
+    coffeeSubtotalKr: total.coffeeSubtotalKr,
+    shippingShareKr: total.shippingShareKr,
+    totalKr: total.totalKr,
+  }
+}
+
 export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await isCustomerUnlocked())) return { unlocked: false as const }
@@ -197,6 +254,9 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
         openRound: null,
         customers: customerRows,
         selectedCustomer,
+        statusOrder: selectedCustomer
+          ? await getLatestCustomerStatusOrder(selectedCustomer.id)
+          : null,
       }
 
     const supplierRows = await db
@@ -236,6 +296,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
       },
       customers: customerRows,
       selectedCustomer,
+      statusOrder: null,
     }
   }
 )
@@ -257,7 +318,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
         db
           .select()
           .from(rounds)
-          .where(eq(rounds.status, "closed"))
+          .where(inArray(rounds.status, ["closed", "ready"]))
           .orderBy(desc(rounds.closedAt))
           .limit(10),
       ])
@@ -397,6 +458,23 @@ export const openRound = createServerFn({ method: "POST" })
     return round
   })
 
+export const updateRoundClosesAt = createServerFn({ method: "POST" })
+  .inputValidator((input) => updateRoundClosesAtSchema.parse(input))
+  .handler(async ({ data }) => {
+    await assertAdmin()
+    const updatedRoundRows = await db
+      .update(rounds)
+      .set({
+        closesAt: data.closesAt ? new Date(data.closesAt) : null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(rounds.id, data.roundId), eq(rounds.status, "open")))
+      .returning()
+    const round = updatedRoundRows.at(0)
+    if (!round) throw new Error("Open round not found")
+    return round
+  })
+
 export const closeRound = createServerFn({ method: "POST" })
   .inputValidator((input) => closeRoundSchema.parse(input))
   .handler(async ({ data }) => {
@@ -413,6 +491,39 @@ export const closeRound = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Open round not found")
+    return round
+  })
+
+export const updateRoundShipping = createServerFn({ method: "POST" })
+  .inputValidator((input) => updateRoundShippingSchema.parse(input))
+  .handler(async ({ data }) => {
+    await assertAdmin()
+    const updatedRoundRows = await db
+      .update(rounds)
+      .set({ shippingKr: data.shippingKr, updatedAt: new Date() })
+      .where(
+        and(
+          eq(rounds.id, data.roundId),
+          inArray(rounds.status, ["closed", "ready"])
+        )
+      )
+      .returning()
+    const round = updatedRoundRows.at(0)
+    if (!round) throw new Error("Closed round not found")
+    return round
+  })
+
+export const markRoundReadyForPickup = createServerFn({ method: "POST" })
+  .inputValidator((input) => markRoundReadySchema.parse(input))
+  .handler(async ({ data }) => {
+    await assertAdmin()
+    const updatedRoundRows = await db
+      .update(rounds)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(and(eq(rounds.id, data.roundId), eq(rounds.status, "closed")))
+      .returning()
+    const round = updatedRoundRows.at(0)
+    if (!round) throw new Error("Closed round not found")
     return round
   })
 
@@ -436,7 +547,9 @@ export const selectCustomer = createServerFn({ method: "POST" })
     const customerRows = await db
       .select()
       .from(customers)
-      .where(and(eq(customers.id, data.customerId), eq(customers.isActive, true)))
+      .where(
+        and(eq(customers.id, data.customerId), eq(customers.isActive, true))
+      )
       .limit(1)
     const customer = customerRows.at(0)
     if (!customer) throw new Error("Customer not found")
@@ -547,6 +660,7 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
 
     return {
       orderId: total.orderId,
+      roundStatus: row.round.status,
       customerName: total.customerName,
       customerPhone: orderSummary.customerPhone,
       createdAt: orderSummary.createdAt,

@@ -48,6 +48,30 @@ export type OrderLeaderboardEntry = {
   totalKr: number
 }
 
+export type RoundGrandTotals = {
+  bagCount: number
+  coffeeSubtotalKr: number
+  shippingKr: number
+  totalKr: number
+}
+
+export type CustomerOrderStatusInput = {
+  roundStatus: "closed" | "ready"
+  paid: boolean
+  collected: boolean
+}
+
+export type CustomerOrderStep = {
+  id: "ordered" | "delivery" | "payment" | "pickup"
+  label: string
+  complete: boolean
+}
+
+export type CustomerOrderState = {
+  headline: string
+  steps: Array<CustomerOrderStep>
+}
+
 export function calculateOrderLeaderboard(
   orders: RoundTotalsInput["orders"]
 ): Array<OrderLeaderboardEntry> {
@@ -58,7 +82,8 @@ export function calculateOrderLeaderboard(
         0
       )
       const totalKr = order.items.reduce(
-        (sum, item) => sum + addCoffeeVat(Math.max(0, item.quantity) * item.priceKr),
+        (sum, item) =>
+          sum + addCoffeeVat(Math.max(0, item.quantity) * item.priceKr),
         0
       )
 
@@ -78,13 +103,20 @@ export function calculateOrderLeaderboard(
     )
 }
 
-export function calculateCoffeeTotals(orders: RoundTotalsInput["orders"]): Array<CoffeeTotal> {
+export function calculateCoffeeTotals(
+  orders: RoundTotalsInput["orders"]
+): Array<CoffeeTotal> {
   const totals = new Map<string, CoffeeTotal>()
 
   for (const order of orders) {
     for (const item of order.items) {
       if (item.quantity <= 0) continue
-      const existing = totals.get(item.name) ?? { name: item.name, imageUrl: item.imageUrl ?? "", quantity: 0, totalKr: 0 }
+      const existing = totals.get(item.name) ?? {
+        name: item.name,
+        imageUrl: item.imageUrl ?? "",
+        quantity: 0,
+        totalKr: 0,
+      }
       totals.set(item.name, {
         ...existing,
         imageUrl: existing.imageUrl || item.imageUrl || "",
@@ -94,10 +126,15 @@ export function calculateCoffeeTotals(orders: RoundTotalsInput["orders"]): Array
     }
   }
 
-  return Array.from(totals.values()).sort((left, right) => right.quantity - left.quantity || left.name.localeCompare(right.name))
+  return Array.from(totals.values()).sort(
+    (left, right) =>
+      right.quantity - left.quantity || left.name.localeCompare(right.name)
+  )
 }
 
-export function calculateRoundTotals(input: RoundTotalsInput): Array<OrderTotal> {
+export function calculateRoundTotals(
+  input: RoundTotalsInput
+): Array<OrderTotal> {
   if (input.orders.length === 0) return []
 
   const baseShippingShare = Math.floor(input.shippingKr / input.orders.length)
@@ -108,7 +145,10 @@ export function calculateRoundTotals(input: RoundTotalsInput): Array<OrderTotal>
       ...item,
       subtotalKr: addCoffeeVat(item.quantity * item.priceKr),
     }))
-    const coffeeSubtotalKr = items.reduce((sum, item) => sum + item.subtotalKr, 0)
+    const coffeeSubtotalKr = items.reduce(
+      (sum, item) => sum + item.subtotalKr,
+      0
+    )
     const coffeeVatKr = order.items.reduce(
       (sum, item) => sum + calculateCoffeeVat(item.quantity * item.priceKr),
       0
@@ -127,4 +167,50 @@ export function calculateRoundTotals(input: RoundTotalsInput): Array<OrderTotal>
       items,
     }
   })
+}
+
+export function calculateRoundGrandTotals(
+  input: RoundTotalsInput
+): RoundGrandTotals {
+  const orderTotals = calculateRoundTotals(input)
+  return {
+    bagCount: input.orders.reduce(
+      (sum, order) =>
+        sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0
+    ),
+    coffeeSubtotalKr: orderTotals.reduce(
+      (sum, order) => sum + order.coffeeSubtotalKr,
+      0
+    ),
+    shippingKr: input.shippingKr,
+    totalKr: orderTotals.reduce((sum, order) => sum + order.totalKr, 0),
+  }
+}
+
+export function getCustomerOrderState(
+  input: CustomerOrderStatusInput
+): CustomerOrderState {
+  const hasArrived = input.roundStatus === "ready"
+  const headline = input.collected
+    ? "Hentet"
+    : input.paid
+      ? "Klar til henting"
+      : hasArrived
+        ? "Må betales"
+        : "På vei"
+
+  return {
+    headline,
+    steps: [
+      { id: "ordered", label: "Bestilt", complete: true },
+      { id: "delivery", label: "På vei", complete: true },
+      { id: "payment", label: "Må betales", complete: input.paid },
+      { id: "pickup", label: "Klar til henting", complete: input.collected },
+    ],
+  }
+}
+
+export function getCustomerOrderStatus(input: CustomerOrderStatusInput) {
+  return getCustomerOrderState(input).headline
 }
