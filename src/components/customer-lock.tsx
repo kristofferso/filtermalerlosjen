@@ -1,4 +1,4 @@
-import { BRAND_NAME } from "@/components/brand"
+import { BRAND_NAME, BrandLogo } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 
 export function CustomerPasswordLanding({
@@ -32,14 +32,13 @@ export function CustomerPasswordLanding({
           </p>
         </div>
 
-        <div className="mt-8 max-w-[40ch] mx-auto space-y-4 text-sm leading-6 text-muted-foreground">
+        <div className="mx-auto mt-8 max-w-[40ch] space-y-4 text-sm leading-6 text-muted-foreground">
           <p className="text-foreground">
-            Råvareprisene øker, inflasjonen lekker inn fra verdensøkonomien og dagligvaremafiaen får holde på. Noe må gjøres...
+            Råvareprisene øker, inflasjonen lekker inn fra verdensøkonomien og
+            dagligvaremafiaen får holde på. Noe må gjøres...
           </p>
 
-          <p>
-            ...for at vi skal kunne fortsette å drikke digg kaffe.
-          </p>
+          <p>...for at vi skal kunne fortsette å drikke digg kaffe.</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 w-full text-left">
@@ -75,12 +74,9 @@ export function CustomerPasswordLanding({
         </form>
       </div>
 
-      <img
-        src="/filtermalerlosjen-logo.png"
-        alt=""
-        aria-hidden="true"
+      <BrandLogo
+        decorative
         className="pointer-events-none absolute bottom-5 left-1/2 h-9 w-auto -translate-x-1/2 opacity-55 brightness-0 invert sm:bottom-6 sm:h-10"
-        loading="eager"
       />
     </section>
   )

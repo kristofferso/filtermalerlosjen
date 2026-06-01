@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 import { BRAND_NAME } from "@/components/brand"
+import { LogisticsFooter } from "@/components/logistics-footer"
 import { Button } from "@/components/ui/button"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { formatKr } from "@/lib/money"
@@ -62,6 +63,7 @@ function CustomerPage() {
             selectedCustomer={data.selectedCustomer}
           />
         ) : null}
+        <LogisticsFooter customers={data.customers} />
       </div>
     </main>
   )
@@ -107,7 +109,7 @@ function AppHeader({
 
 function EmptyState() {
   return (
-    <section className="rounded-lg border border-[var(--ledger-line)] bg-card p-6">
+    <section className="rounded-lg border border-(--ledger-line) bg-card p-6">
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         STATUS
       </p>
@@ -131,9 +133,9 @@ function CustomerStatusPanel({ order }: { order: StatusOrder }) {
   })
 
   return (
-    <section className="rounded-lg border border-[var(--ledger-line)] bg-card p-5 sm:p-6">
+    <section className="">
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-        STATUS
+        Dine ordre
       </p>
       <a
         className="mt-3 grid gap-4 rounded-lg border border-border bg-muted/25 p-4 text-left hover:bg-muted/40 sm:grid-cols-[1fr_auto] sm:items-center"

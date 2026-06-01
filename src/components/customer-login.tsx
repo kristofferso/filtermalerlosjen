@@ -69,7 +69,7 @@ export function CustomerLoginCard({
   }
 
   return (
-    <section className="w-full max-w-md rounded-xl border border-[var(--ledger-line)] bg-card p-5 shadow-2xl shadow-black/25 sm:p-6">
+    <section className="w-full max-w-md rounded-xl border border-(--ledger-line) bg-card p-5 shadow-2xl shadow-black/25 sm:p-6">
       <form onSubmit={handleSelect}>
         <h1 className="font-serif text-4xl font-normal tracking-tight">
           Identifiser deg

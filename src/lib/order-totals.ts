@@ -188,25 +188,35 @@ export function calculateRoundGrandTotals(
   }
 }
 
-export function getCustomerOrderState(
-  input: CustomerOrderStatusInput
-): CustomerOrderState {
-  const hasArrived = input.roundStatus === "ready"
-  const headline = input.collected
+export function getCustomerOrderState({
+  collected,
+  paid,
+  roundStatus,
+}: CustomerOrderStatusInput): CustomerOrderState {
+  const hasArrived = roundStatus === "ready"
+  const headline = collected
     ? "Hentet"
-    : input.paid
-      ? "Klar til henting"
+    : paid
+      ? "Betalt og klar til henting"
       : hasArrived
-        ? "Må betales"
+        ? "Kan hentes og betales"
         : "På vei"
 
   return {
     headline,
     steps: [
       { id: "ordered", label: "Bestilt", complete: true },
-      { id: "delivery", label: "På vei", complete: true },
-      { id: "payment", label: "Må betales", complete: input.paid },
-      { id: "pickup", label: "Klar til henting", complete: input.collected },
+      {
+        id: "delivery",
+        label: hasArrived ? "Ankommet" : "På vei",
+        complete: hasArrived,
+      },
+      { id: "payment", label: paid ? "Betalt" : "Må betales", complete: paid },
+      {
+        id: "pickup",
+        label: collected ? "Hentet" : "Klar til henting",
+        complete: collected,
+      },
     ],
   }
 }

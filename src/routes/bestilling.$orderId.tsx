@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
-import { BRAND_NAME } from "@/components/brand"
+import { BRAND_NAME, BrandLogo } from "@/components/brand"
 import { OrderStatusStepper } from "@/components/order-status-stepper"
 import { buttonVariants } from "@/components/ui/button"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
@@ -43,11 +43,11 @@ function PaymentPage() {
             <h1 className="mt-3 font-serif text-4xl font-normal tracking-tight text-balance sm:text-5xl">
               {order
                 ? getCustomerOrderStatus({
-                    roundStatus:
-                      order.roundStatus === "ready" ? "ready" : "closed",
-                    paid: order.paid,
-                    collected: order.collected,
-                  })
+                  roundStatus:
+                    order.roundStatus === "ready" ? "ready" : "closed",
+                  paid: order.paid,
+                  collected: order.collected,
+                })
                 : "Din bestilling"}
             </h1>
           </div>
@@ -55,12 +55,10 @@ function PaymentPage() {
           {!order ? <MissingOrder /> : <PaymentCard order={order} />}
         </div>
 
-        <img
-          src="/filtermalerlosjen-logo.png"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-5 left-1/2 h-9 w-auto -translate-x-1/2 opacity-55 brightness-0 invert sm:bottom-6 sm:h-10"
-          loading="eager"
+        <BrandLogo
+          white
+          decorative
+          className="pointer-events-none absolute bottom-5 left-1/2 h-8 w-auto -translate-x-1/2 opacity-55 sm:bottom-6"
         />
       </section>
     </main>
