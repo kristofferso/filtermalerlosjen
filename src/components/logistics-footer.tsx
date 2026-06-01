@@ -237,13 +237,13 @@ function HoverTranslation({
 }) {
   return (
     <span
-      className={`relative block min-w-0 flex-1 font-mono text-[0.65rem] tracking-[0.18em] uppercase ${align === "right" ? "text-right" : "text-left"
+      className={`relative block min-w-0 flex-1 font-mono text-[0.55rem] tracking-[0.18em] uppercase ${align === "right" ? "text-right" : "text-left"
         }`}
     >
-      <span className="transition-opacity duration-300 group-hover:opacity-0">
+      <span className="transition-opacity duration-300 group-hover:opacity-0 line-clamp-1">
         {original}
       </span>
-      <span className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-500">
+      <span className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-500 line-clamp-1 ">
         {translation}
       </span>
     </span>
@@ -353,7 +353,7 @@ function LogisticsNetwork({
               </h3>
             </div>
             {assignments.length > 0 ? (
-              <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <ul className="mt-4 grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                 {assignments.map(({ customer, region }, index) => {
                   const selected = selectedRegion?.id === region.id
                   return (
@@ -366,9 +366,9 @@ function LogisticsNetwork({
                         type="button"
                         onClick={() => setSelectedRegion(region)}
                       >
-                        <span className="flex items-center gap-3">
+                        <span className="flex items-center max-sm:flex-col max-sm:items-start gap-3">
                           <span className="relative grid size-14 shrink-0 place-items-center rounded-md border border-border bg-background text-foreground">
-                            <span className="font-mono text-sm font-semibold">
+                            <span className="font-mono text-xl font-semibold">
                               {getInitials(customer.name)}
                             </span>
                             <span className="absolute -right-1.5 -bottom-1.5 rounded-sm border border-border bg-card px-1.5 py-0.5 font-serif text-sm leading-none text-muted-foreground">

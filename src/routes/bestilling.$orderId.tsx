@@ -1,4 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { Link, createFileRoute, redirect } from "@tanstack/react-router"
+import { ChevronLeft } from "lucide-react"
 import { BRAND_NAME, BrandLogo } from "@/components/brand"
 import { OrderStatusStepper } from "@/components/order-status-stepper"
 import { buttonVariants } from "@/components/ui/button"
@@ -36,9 +37,17 @@ function PaymentPage() {
         }}
       >
         <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card/95 p-6 text-card-foreground shadow-2xl shadow-black/20 sm:p-8">
+          <Link
+            to="/"
+            className="mb-6 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-none"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+            Tilbake til oversikt
+          </Link>
+
           <div className="text-center">
             <p className="font-mono text-[0.7rem] tracking-[0.22em] text-muted-foreground uppercase">
-              {BRAND_NAME}
+              Bestilling #{order?.orderId.slice(0, 8)}
             </p>
             <h1 className="mt-3 font-serif text-4xl font-normal tracking-tight text-balance sm:text-5xl">
               {order
@@ -72,7 +81,6 @@ function PaymentCard({ order }: { order: PaymentOrder }) {
     <div className="mt-8">
       <div className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
         <div>
-          <p className="text-sm text-muted-foreground">Bestilling</p>
           <p className="mt-1 text-xl font-semibold">{order.customerName}</p>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {formatDate(order.createdAt)}
