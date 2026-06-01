@@ -1,14 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 import { BRAND_NAME } from "@/components/brand"
 import { OrderStatusStepper } from "@/components/order-status-stepper"
 import { buttonVariants } from "@/components/ui/button"
+import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { formatKr } from "@/lib/money"
 import { getCustomerOrderStatus } from "@/lib/order-totals"
+import { getCustomerRouteAccess } from "@/server/customer-access"
 import { getPaymentOrderData } from "@/server/coffee"
 
 export const Route = createFileRoute("/bestilling/$orderId")({
-  loader: ({ params }) =>
-    getPaymentOrderData({ data: { orderId: params.orderId } }),
+  loader: async ({ location, params }) => {
+    const access = await getCustomerRouteAccess()
+    const loginRedirect = getCustomerLoginRedirect({
+      unlocked: access.unlocked,
+      hasSelectedCustomer: Boolean(access.selectedCustomerId),
+      currentPath: location.href,
+    })
+    if (loginRedirect) throw redirect(loginRedirect)
+
+    return getPaymentOrderData({ data: { orderId: params.orderId } })
+  },
   component: PaymentPage,
 })
 

@@ -239,6 +239,23 @@ async function getLatestCustomerStatusOrder(customerId: string) {
   }
 }
 
+export const getCustomerLoginData = createServerFn({ method: "GET" }).handler(
+  async () => {
+    if (!(await isCustomerUnlocked())) return { unlocked: false as const }
+
+    const [customerRows, selectedCustomer] = await Promise.all([
+      getActiveCustomers(),
+      getSelectedCustomer(),
+    ])
+
+    return {
+      unlocked: true as const,
+      customers: customerRows,
+      selectedCustomer,
+    }
+  }
+)
+
 export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await isCustomerUnlocked())) return { unlocked: false as const }
@@ -627,6 +644,12 @@ export const submitOrder = createServerFn({ method: "POST" })
 export const getPaymentOrderData = createServerFn({ method: "GET" })
   .inputValidator((input) => z.object({ orderId: uuidSchema }).parse(input))
   .handler(async ({ data }) => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const selectedCustomerId = await getSelectedCustomerId()
+    if (!selectedCustomerId) throw new Error("Velg hvem som bestiller")
+
     const orderRows = await db
       .select({ order: orders, round: rounds })
       .from(orders)
@@ -634,7 +657,7 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
       .where(eq(orders.id, data.orderId))
       .limit(1)
     const row = orderRows.at(0)
-    if (!row) return null
+    if (!row || row.order.customerId !== selectedCustomerId) return null
 
     const orderSummaries = await getOrderSummaries([row.order.roundId])
     const orderSummary = orderSummaries.find(

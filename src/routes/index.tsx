@@ -1,25 +1,33 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router"
-import { useMemo, useRef, useState } from "react"
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router"
+import { useMemo, useState } from "react"
 import { BRAND_NAME } from "@/components/brand"
-import { CustomerPasswordLanding } from "@/components/customer-lock"
 import { Button } from "@/components/ui/button"
+import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { formatKr } from "@/lib/money"
 import {
   calculateOrderLeaderboard,
   getCustomerOrderStatus,
 } from "@/lib/order-totals"
 import { addCoffeeVat, calculateCoffeeVat } from "@/lib/vat"
-import { unlockCustomer } from "@/server/auth.functions"
+import { getCustomerRouteAccess } from "@/server/customer-access"
 import {
   getCustomerHomeData,
   logoutCustomer,
-  registerCustomer,
-  selectCustomer,
   submitOrder,
 } from "@/server/coffee"
 
 export const Route = createFileRoute("/")({
-  loader: () => getCustomerHomeData(),
+  loader: async ({ location }) => {
+    const access = await getCustomerRouteAccess()
+    const loginRedirect = getCustomerLoginRedirect({
+      unlocked: access.unlocked,
+      hasSelectedCustomer: Boolean(access.selectedCustomerId),
+      currentPath: location.href,
+    })
+    if (loginRedirect) throw redirect(loginRedirect)
+
+    return getCustomerHomeData()
+  },
   component: CustomerPage,
 })
 
@@ -27,13 +35,7 @@ function CustomerPage() {
   const data = Route.useLoaderData()
   const router = useRouter()
 
-  if (!data.unlocked) {
-    return (
-      <main className="min-h-svh text-foreground">
-        <PasswordForm onUnlocked={() => router.invalidate()} />
-      </main>
-    )
-  }
+  if (!data.unlocked) return null
 
   return (
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
@@ -47,12 +49,6 @@ function CustomerPage() {
           }}
         />
 
-        {!data.selectedCustomer ? (
-          <CustomerIdentityPanel
-            customers={data.customers}
-            refresh={() => router.invalidate()}
-          />
-        ) : null}
         {data.selectedCustomer && !data.openRound ? (
           data.statusOrder ? (
             <CustomerStatusPanel order={data.statusOrder} />
@@ -109,183 +105,6 @@ function AppHeader({
   )
 }
 
-function CustomerIdentityPanel({
-  customers,
-  refresh,
-}: {
-  customers: CustomerData["customers"]
-  refresh: () => Promise<void>
-}) {
-  const [selectedCustomerId, setSelectedCustomerId] = useState(
-    customers[0]?.id ?? ""
-  )
-  const [name, setName] = useState("")
-  const [phone, setPhone] = useState("")
-  const [email, setEmail] = useState("")
-  const [error, setError] = useState("")
-  const [isSelecting, setIsSelecting] = useState(false)
-  const [isRegistering, setIsRegistering] = useState(false)
-  const pendingActionRef = useRef<"select" | "register" | null>(null)
-
-  async function handleSelect(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selectedCustomerId || pendingActionRef.current) return
-    pendingActionRef.current = "select"
-    setError("")
-    setIsSelecting(true)
-    try {
-      await selectCustomer({ data: { customerId: selectedCustomerId } })
-      await refresh()
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Kunne ikke velge person"
-      )
-    } finally {
-      pendingActionRef.current = null
-      setIsSelecting(false)
-    }
-  }
-
-  async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (pendingActionRef.current) return
-    pendingActionRef.current = "register"
-    setError("")
-    setIsRegistering(true)
-    try {
-      await registerCustomer({ data: { name, phone, email } })
-      await refresh()
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Kunne ikke registrere person"
-      )
-      pendingActionRef.current = null
-      setIsRegistering(false)
-    }
-  }
-
-  return (
-    <section className="rounded-lg border border-[var(--ledger-line)] bg-card p-5 sm:p-6">
-      <div className="mx-auto max-w-xl">
-        <form onSubmit={handleSelect}>
-          <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            PERSON
-          </p>
-          <h2 className="mt-2 font-serif text-2xl font-normal tracking-tight">
-            Velg eksisterende
-          </h2>
-          <label className="mt-5 block space-y-2">
-            <span className="text-sm font-medium">Hvem bestiller?</span>
-            <select
-              className="h-10 w-full rounded-md border border-input py-0 pr-10 pl-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-              value={selectedCustomerId}
-              onChange={(event) => setSelectedCustomerId(event.target.value)}
-              disabled={isSelecting || isRegistering}
-            >
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            className="mt-5 w-full"
-            type="submit"
-            disabled={!selectedCustomerId || isSelecting || isRegistering}
-          >
-            {isSelecting ? "Fortsetter" : "Fortsett"}
-          </Button>
-        </form>
-
-        <div className="my-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <span className="h-px bg-border" />
-          <span className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            eller
-          </span>
-          <span className="h-px bg-border" />
-        </div>
-
-        <form onSubmit={handleRegister}>
-          <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            REGISTRER
-          </p>
-          <h2 className="mt-2 font-serif text-2xl font-normal tracking-tight">
-            Ny person
-          </h2>
-          <div className="mt-5 grid gap-3">
-            <TextField
-              label="Navn"
-              value={name}
-              onChange={setName}
-              autoComplete="name"
-              disabled={isSelecting || isRegistering}
-            />
-            <TextField
-              label="Telefonnummer"
-              value={phone}
-              onChange={setPhone}
-              autoComplete="tel-national"
-              inputMode="numeric"
-              pattern="[0-9]{8}"
-              maxLength={8}
-              disabled={isSelecting || isRegistering}
-            />
-            <TextField
-              label="E-post"
-              value={email}
-              onChange={setEmail}
-              autoComplete="email"
-              type="email"
-              disabled={isSelecting || isRegistering}
-            />
-          </div>
-          <Button
-            className="mt-5 w-full"
-            type="submit"
-            disabled={isSelecting || isRegistering}
-          >
-            {isRegistering ? "Registrerer" : "Registrer og fortsett"}
-          </Button>
-        </form>
-
-        {error ? (
-          <p className="mt-4 text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  )
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  type = "text",
-  ...inputProps
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  type?: string
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value">) {
-  return (
-    <label className="block space-y-2">
-      <span className="text-sm font-medium">{label}</span>
-      <input
-        className="h-10 w-full rounded-md border border-input px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required
-        {...inputProps}
-      />
-    </label>
-  )
-}
-
 function EmptyState() {
   return (
     <section className="rounded-lg border border-[var(--ledger-line)] bg-card p-6">
@@ -336,35 +155,6 @@ function CustomerStatusPanel({ order }: { order: StatusOrder }) {
         </span>
       </a>
     </section>
-  )
-}
-
-function PasswordForm({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsSubmitting(true)
-    setError("")
-    const result = await unlockCustomer({ data: { password } })
-    setIsSubmitting(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    await onUnlocked()
-  }
-
-  return (
-    <CustomerPasswordLanding
-      password={password}
-      error={error}
-      isSubmitting={isSubmitting}
-      onPasswordChange={setPassword}
-      onSubmit={handleSubmit}
-    />
   )
 }
 
