@@ -1,9 +1,19 @@
 import createGlobe from "cobe"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { X } from "lucide-react"
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react"
+import type {
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  UIEvent as ReactUIEvent,
+} from "react"
 import { BrandLogo } from "@/components/brand"
 import { Button } from "@/components/ui/button"
+import { getFocusRotation } from "@/lib/globe-rotation"
+import { logisticsGalleryClasses } from "@/lib/logistics-gallery-layout"
+import { getNextCenteredGalleryItemId } from "@/lib/logistics-gallery-selection"
+import { getFooterInteractionState } from "@/lib/logistics-footer-interactions"
+
+export { getFocusRotation } from "@/lib/globe-rotation"
 
 const OSLO: [number, number] = [59.9139, 10.7522]
 
@@ -190,28 +200,51 @@ export function LogisticsFooter({
   customers?: Array<NetworkCustomer>
 }) {
   const [open, setOpen] = useState(false)
+  const [translated, setTranslated] = useState(false)
 
   return (
     <>
       <footer className="mt-10 border-t border-(--ledger-line) py-6">
         <button
-          className="group mx-auto flex w-full max-w-xl items-center justify-center gap-3 text-muted-foreground transition-colors duration-1000 hover:text-foreground"
+          className={`group mx-auto flex w-full max-w-xl items-center justify-center gap-3 text-muted-foreground transition-colors duration-1000 ${
+            translated ? "text-foreground" : "hover:text-foreground"
+          }`}
           type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Åpne logistikknettverk"
+          onClick={() => {
+            const nextState = getFooterInteractionState(
+              { translated, open },
+              "click"
+            )
+            setTranslated(nextState.translated)
+            setOpen(nextState.open)
+          }}
+          onDoubleClick={() => {
+            const nextState = getFooterInteractionState(
+              { translated, open },
+              "doubleClick"
+            )
+            setTranslated(nextState.translated)
+            setOpen(nextState.open)
+          }}
+          aria-pressed={translated}
+          aria-label="Vis oversettelse. Dobbeltklikk for å åpne logistikknettverk"
         >
           <HoverTranslation
             align="right"
             original="Fabae peregrinantur"
             translation="bønnene reiser"
+            translated={translated}
           />
           <BrandLogo
-            className="size-6 opacity-80 transition-opacity duration-1000 group-hover:opacity-100"
+            className={`size-6 opacity-80 transition-opacity duration-1000 ${
+              translated ? "opacity-100" : "group-hover:opacity-100"
+            }`}
             white
           />
           <HoverTranslation
             original="Nos non peregrinantur"
             translation="vi reiser ikke"
+            translated={translated}
           />
         </button>
       </footer>
@@ -230,20 +263,31 @@ function HoverTranslation({
   original,
   translation,
   align = "left",
+  translated,
 }: {
   original: string
   translation: string
   align?: "left" | "right"
+  translated: boolean
 }) {
   return (
     <span
-      className={`relative block min-w-0 flex-1 font-mono text-[0.55rem] tracking-[0.18em] uppercase ${align === "right" ? "text-right" : "text-left"
-        }`}
+      className={`relative block min-w-0 flex-1 font-mono text-[0.55rem] tracking-[0.18em] uppercase ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
     >
-      <span className="transition-opacity duration-300 group-hover:opacity-0 line-clamp-1">
+      <span
+        className={`line-clamp-1 transition-opacity duration-300 ${
+          translated ? "opacity-0" : "opacity-100"
+        }`}
+      >
         {original}
       </span>
-      <span className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-500 line-clamp-1 ">
+      <span
+        className={`absolute inset-0 line-clamp-1 transition-opacity duration-500 ${
+          translated ? "opacity-100" : "opacity-0"
+        }`}
+      >
         {translation}
       </span>
     </span>
@@ -268,12 +312,66 @@ function LogisticsNetwork({
   )
   const [selectedRegion, setSelectedRegion] = useState<TradeRegion | null>(null)
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const gallerySelectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
+  const selectedRegionIdRef = useRef<string | null>(null)
 
   const requestClose = useCallback(() => {
     setVisible(false)
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     closeTimeoutRef.current = setTimeout(onClose, 700)
   }, [onClose])
+
+  const selectCenteredGalleryContact = useCallback(
+    (gallery: HTMLUListElement) => {
+      if (window.matchMedia("(min-width: 768px)").matches) return
+
+      const galleryRect = gallery.getBoundingClientRect()
+      const centeredRegionId = getNextCenteredGalleryItemId(
+        Array.from(gallery.children).flatMap((child) => {
+          if (!(child instanceof HTMLElement)) return []
+          const regionId = child.dataset.regionId
+          if (!regionId) return []
+
+          const childRect = child.getBoundingClientRect()
+          return [
+            {
+              id: regionId,
+              center: childRect.left + childRect.width / 2,
+            },
+          ]
+        }),
+        galleryRect.left + galleryRect.width / 2,
+        selectedRegionIdRef.current
+      )
+      if (!centeredRegionId) return
+
+      const centeredRegion = TRADE_REGIONS.find(
+        (region) => region.id === centeredRegionId
+      )
+      if (!centeredRegion) return
+
+      selectedRegionIdRef.current = centeredRegion.id
+      setSelectedRegion(centeredRegion)
+    },
+    []
+  )
+
+  const scheduleCenteredGallerySelection = useCallback(
+    (event: ReactUIEvent<HTMLUListElement>) => {
+      const gallery = event.currentTarget
+
+      if (gallerySelectTimeoutRef.current) {
+        clearTimeout(gallerySelectTimeoutRef.current)
+      }
+
+      gallerySelectTimeoutRef.current = setTimeout(() => {
+        selectCenteredGalleryContact(gallery)
+      }, 80)
+    },
+    [selectCenteredGalleryContact]
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 0)
@@ -286,21 +384,26 @@ function LogisticsNetwork({
     return () => {
       clearTimeout(timer)
       if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
+      if (gallerySelectTimeoutRef.current) {
+        clearTimeout(gallerySelectTimeoutRef.current)
+      }
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, [requestClose])
 
   return (
     <div
-      className={`fixed inset-0 z-50 overflow-y-auto bg-background/90 text-foreground backdrop-blur-md transition-[opacity,filter,backdrop-filter] duration-700 ${visible ? "blur-0 opacity-100" : "opacity-0 blur-md"
-        }`}
+      className={`fixed inset-0 z-50 overflow-y-auto bg-background/90 text-foreground backdrop-blur-md transition-[opacity,filter,backdrop-filter] duration-700 ${
+        visible ? "blur-0 opacity-100" : "opacity-0 blur-md"
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="logistics-network-title"
     >
       <div
-        className={`mx-auto flex min-h-svh w-full max-w-6xl flex-col px-4 py-5 transition-[opacity,filter] duration-700 sm:px-6 lg:px-8 ${visible ? "blur-0 opacity-100" : "opacity-0 blur-lg"
-          }`}
+        className={`mx-auto flex min-h-svh w-full max-w-6xl flex-col px-4 py-5 transition-[opacity,filter] duration-700 sm:px-6 lg:px-8 ${
+          visible ? "blur-0 opacity-100" : "opacity-0 blur-lg"
+        }`}
       >
         <header className="flex items-start justify-end gap-4 py-4">
           <Button
@@ -336,7 +439,10 @@ function LogisticsNetwork({
               <button
                 className="absolute top-3 right-3 z-20 grid size-10 place-items-center rounded-full border border-border bg-background/80 font-mono text-lg text-muted-foreground backdrop-blur transition-colors hover:bg-muted hover:text-foreground"
                 type="button"
-                onClick={() => setSelectedRegion(null)}
+                onClick={() => {
+                  selectedRegionIdRef.current = null
+                  setSelectedRegion(null)
+                }}
                 aria-label="Frigi rotasjon"
                 title="Frigi rotasjon"
               >
@@ -353,20 +459,31 @@ function LogisticsNetwork({
               </h3>
             </div>
             {assignments.length > 0 ? (
-              <ul className="mt-4 grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <ul
+                className={logisticsGalleryClasses.list}
+                onScroll={scheduleCenteredGallerySelection}
+              >
                 {assignments.map(({ customer, region }, index) => {
                   const selected = selectedRegion?.id === region.id
                   return (
-                    <li key={customer.id}>
+                    <li
+                      className={logisticsGalleryClasses.item}
+                      data-region-id={region.id}
+                      key={customer.id}
+                    >
                       <button
-                        className={`relative h-full min-h-40 w-full overflow-hidden rounded-md border p-4 text-left transition-colors ${selected
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-muted/25 hover:bg-muted/40"
-                          }`}
+                        className={`relative h-full min-h-40 w-full overflow-hidden rounded-md border p-4 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-muted/25 hover:bg-muted/40"
+                        }`}
                         type="button"
-                        onClick={() => setSelectedRegion(region)}
+                        onClick={() => {
+                          selectedRegionIdRef.current = region.id
+                          setSelectedRegion(region)
+                        }}
                       >
-                        <span className="flex items-center max-sm:flex-col max-sm:items-start gap-3">
+                        <span className="flex items-center gap-3 max-sm:flex-col max-sm:items-start">
                           <span className="relative grid size-14 shrink-0 place-items-center rounded-md border border-border bg-background text-foreground">
                             <span className="font-mono text-xl font-semibold">
                               {getInitials(customer.name)}
@@ -575,13 +692,6 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part.charAt(0).toLocaleUpperCase("nb-NO"))
     .join("")
-}
-
-export function getFocusRotation([latitude, longitude]: [number, number]) {
-  return {
-    phi: ((90 - longitude) * Math.PI) / 180,
-    theta: Math.max(-0.7, Math.min(0.7, (-latitude * Math.PI) / 180)),
-  }
 }
 
 function shortestAngle(angle: number) {

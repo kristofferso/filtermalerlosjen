@@ -67,7 +67,7 @@ function PaymentPage() {
         <BrandLogo
           white
           decorative
-          className="pointer-events-none absolute bottom-5 left-1/2 h-8 w-auto -translate-x-1/2 opacity-55 sm:bottom-6"
+          className="pointer-events-none mt-5 h-8 w-auto opacity-55 sm:bottom-6"
         />
       </section>
     </main>
