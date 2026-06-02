@@ -57,9 +57,11 @@ const updateRoundShippingSchema = z.object({
   shippingKr: z.number().int().min(0),
 })
 const markRoundReadySchema = z.object({ roundId: uuidSchema })
-const updateRoundClosesAtSchema = z.object({
+const updateRoundDetailsSchema = z.object({
   roundId: uuidSchema,
   closesAt: z.string().datetime().nullable().optional(),
+  shippingKr: z.number().int().min(0).optional(),
+  pickupInstructions: z.string().max(4000).optional().default(""),
 })
 const customerPhoneSchema = z
   .string()
@@ -475,21 +477,38 @@ export const openRound = createServerFn({ method: "POST" })
     return round
   })
 
-export const updateRoundClosesAt = createServerFn({ method: "POST" })
-  .inputValidator((input) => updateRoundClosesAtSchema.parse(input))
+export const updateRoundDetails = createServerFn({ method: "POST" })
+  .inputValidator((input) => updateRoundDetailsSchema.parse(input))
   .handler(async ({ data }) => {
     await assertAdmin()
-    const updatedRoundRows = await db
+
+    const roundRows = await db
+      .select()
+      .from(rounds)
+      .where(eq(rounds.id, data.roundId))
+      .limit(1)
+    const round = roundRows.at(0)
+    if (!round) throw new Error("Round not found")
+
+    const values: Partial<typeof rounds.$inferInsert> = {
+      pickupInstructions: data.pickupInstructions,
+      updatedAt: new Date(),
+    }
+
+    if (round.status === "open") {
+      values.closesAt = data.closesAt ? new Date(data.closesAt) : null
+    }
+
+    if (round.status === "closed" || round.status === "ready") {
+      values.shippingKr = data.shippingKr ?? round.shippingKr
+    }
+
+    const [updatedRound] = await db
       .update(rounds)
-      .set({
-        closesAt: data.closesAt ? new Date(data.closesAt) : null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(rounds.id, data.roundId), eq(rounds.status, "open")))
+      .set(values)
+      .where(eq(rounds.id, data.roundId))
       .returning()
-    const round = updatedRoundRows.at(0)
-    if (!round) throw new Error("Open round not found")
-    return round
+    return updatedRound
   })
 
 export const closeRound = createServerFn({ method: "POST" })
@@ -696,6 +715,7 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
       shippingShareKr: total.shippingShareKr,
       totalKr: total.totalKr,
       vippsUrl,
+      pickupInstructions: row.round.pickupInstructions,
     }
   })
 

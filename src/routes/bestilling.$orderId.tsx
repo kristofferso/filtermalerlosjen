@@ -1,10 +1,11 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router"
 import { ChevronLeft } from "lucide-react"
-import { BRAND_NAME, BrandLogo } from "@/components/brand"
+import { BrandLogo } from "@/components/brand"
 import { OrderStatusStepper } from "@/components/order-status-stepper"
 import { buttonVariants } from "@/components/ui/button"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { formatKr } from "@/lib/money"
+import { markdownToSafeHtml } from "@/lib/markdown"
 import { getCustomerOrderStatus } from "@/lib/order-totals"
 import { getCustomerRouteAccess } from "@/server/customer-access"
 import { getPaymentOrderData } from "@/server/coffee"
@@ -30,12 +31,24 @@ function PaymentPage() {
   return (
     <main className="min-h-svh text-foreground">
       <section
-        className="relative flex min-h-svh w-full flex-col items-center justify-center overflow-hidden bg-cover bg-center px-4 py-10"
+        className="relative flex min-h-svh w-full flex-col items-center justify-start overflow-hidden px-4 pt-10 pb-24 sm:pt-14"
         style={{
-          backgroundImage:
-            "linear-gradient(to bottom, transparent 55%, rgb(0 0 0 / 0.3) 100%), url('/bg.png')",
+          backgroundColor: "rgb(0 0 0)",
+          backgroundImage: "url('/bg.png')",
+          backgroundPosition: "top center",
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "max(600px, 100%) auto",
         }}
       >
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0"
+          style={{
+            height: "max(600px, 100vw)",
+            backgroundImage:
+              "linear-gradient(to bottom, rgb(0 0 0 / 0) 54%, rgb(0 0 0 / 0.92) 100%)",
+          }}
+          aria-hidden="true"
+        />
         <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card/95 p-6 text-card-foreground shadow-2xl shadow-black/20 sm:p-8">
           <Link
             to="/"
@@ -120,6 +133,8 @@ function PaymentCard({ order }: { order: PaymentOrder }) {
         <SummaryLine label="Totalt" value={formatKr(order.totalKr)} strong />
       </div>
 
+      <PickupInstructions instructions={order.pickupInstructions} />
+
       <div className="mt-6 border-t border-border pt-6">
         {order.paid ? null : order.vippsUrl ? (
           <a
@@ -135,6 +150,25 @@ function PaymentCard({ order }: { order: PaymentOrder }) {
         )}
       </div>
     </div>
+  )
+}
+
+function PickupInstructions({ instructions }: { instructions: string }) {
+  const trimmedInstructions = instructions.trim()
+  if (!trimmedInstructions) return null
+
+  return (
+    <details className="mt-5 rounded-lg border border-border bg-muted/20 p-4">
+      <summary className="cursor-pointer select-none text-sm font-semibold marker:text-muted-foreground">
+        Hvor henter jeg?
+      </summary>
+      <div
+        className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground [&_a]:font-medium [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_li]:ml-5 [&_li]:list-disc [&_p]:max-w-prose [&_strong]:text-foreground"
+        dangerouslySetInnerHTML={{
+          __html: markdownToSafeHtml(trimmedInstructions),
+        }}
+      />
+    </details>
   )
 }
 

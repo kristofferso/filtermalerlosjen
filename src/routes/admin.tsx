@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Circle, Trash2 } from "lucide-react"
+import { Check, Circle, Copy, Trash2 } from "lucide-react"
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
@@ -21,8 +21,7 @@ import {
   openRound,
   updateCoffee,
   updateOrderFlags,
-  updateRoundClosesAt,
-  updateRoundShipping,
+  updateRoundDetails,
 } from "@/server/coffee"
 
 export const Route = createFileRoute("/admin")({
@@ -622,21 +621,6 @@ function OpenRoundSection({
   round: NonNullable<Dashboard["openRound"]>
   refresh: () => Promise<void>
 }) {
-  const [closesAt, setClosesAt] = useState(formatDateTimeLocal(round.closesAt))
-  const [deadlineSaved, setDeadlineSaved] = useState(false)
-
-  async function handleSaveClosesAt() {
-    await updateRoundClosesAt({
-      data: {
-        roundId: round.id,
-        closesAt: closesAt ? new Date(closesAt).toISOString() : null,
-      },
-    })
-    setDeadlineSaved(true)
-    window.setTimeout(() => setDeadlineSaved(false), 1800)
-    await refresh()
-  }
-
   async function handleClose() {
     await closeRound({ data: { roundId: round.id } })
     await refresh()
@@ -657,24 +641,7 @@ function OpenRoundSection({
         <RoundGrandMetrics shippingKr={0} orders={round.orders} />
         <BulkCoffeeTotals orders={round.orders} />
         <OrderList orders={round.orders} refresh={refresh} />
-        <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Stenger (valgfritt)</span>
-            <input
-              className="h-9 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring"
-              type="datetime-local"
-              value={closesAt}
-              onChange={(event) => setClosesAt(event.target.value)}
-            />
-          </label>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={handleSaveClosesAt}
-          >
-            {deadlineSaved ? "Lagret" : "Lagre stenging"}
-          </Button>
-        </div>
+        <EditRoundForm round={round} mode="open" refresh={refresh} />
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
           <p className="text-sm text-muted-foreground">
             Lukk når ekstern bestilling er sendt. Frakt kan settes senere i
@@ -686,6 +653,116 @@ function OpenRoundSection({
         </div>
       </div>
     </section>
+  )
+}
+
+function EditRoundForm({
+  round,
+  mode,
+  refresh,
+}: {
+  round: Round
+  mode: "open" | "settlement"
+  refresh: () => Promise<void>
+}) {
+  const [closesAt, setClosesAt] = useState(formatDateTimeLocal(round.closesAt))
+  const [shipping, setShipping] = useState(String(round.shippingKr))
+  const [pickupInstructions, setPickupInstructions] = useState(
+    round.pickupInstructions
+  )
+  const [saved, setSaved] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await updateRoundDetails({
+      data: {
+        roundId: round.id,
+        closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+        shippingKr: parseKroner(shipping),
+        pickupInstructions,
+      },
+    })
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 1800)
+    await refresh()
+  }
+
+  async function copyPickupInstructions() {
+    await navigator.clipboard.writeText(pickupInstructions)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-lg border border-border bg-muted/30 p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-medium">Rediger runde</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Rundeinfo deles av alle bestillinger i denne runden.
+          </p>
+        </div>
+        <Button variant="secondary" type="submit">
+          {saved ? "Lagret" : "Lagre runde"}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {mode === "open" ? (
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Stenger (valgfritt)</span>
+            <input
+              className="h-9 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring"
+              type="datetime-local"
+              value={closesAt}
+              onChange={(event) => setClosesAt(event.target.value)}
+            />
+          </label>
+        ) : null}
+        {mode === "settlement" ? (
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Frakt i kroner</span>
+            <input
+              className="h-9 w-full rounded-md border border-input px-3 font-mono outline-none focus-visible:border-ring"
+              inputMode="numeric"
+              pattern="\d*"
+              value={shipping}
+              onChange={(event) =>
+                setShipping(event.target.value.replace(/\D/g, ""))
+              }
+            />
+          </label>
+        ) : null}
+      </div>
+
+      <label className="block space-y-1">
+        <span className="text-sm font-medium">Henteinfo</span>
+        <textarea
+          className="min-h-32 w-full rounded-md border border-input px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          value={pickupInstructions}
+          onChange={(event) => setPickupInstructions(event.target.value)}
+          placeholder="Adresse, tidspunkt og praktiske instruksjoner. Markdown støttes."
+        />
+      </label>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Markdown støttes. Lenker blir klikkbare på kundesiden.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          onClick={copyPickupInstructions}
+        >
+          <Copy className="size-4" aria-hidden="true" />
+          {copied ? "Kopiert" : "Kopier henteinfo"}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -971,8 +1048,6 @@ function ClosedRoundSummary({
   round: Dashboard["closedRounds"][number]
   refresh: () => Promise<void>
 }) {
-  const [shipping, setShipping] = useState(String(round.shippingKr))
-  const [shippingSaved, setShippingSaved] = useState(false)
   const totals = calculateRoundTotals({
     shippingKr: round.shippingKr,
     orders: round.orders,
@@ -990,33 +1065,12 @@ function ClosedRoundSummary({
 
       <RoundGrandMetrics shippingKr={round.shippingKr} orders={round.orders} />
 
-      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-        <label className="space-y-1">
-          <span className="text-sm font-medium">Frakt i kroner</span>
-          <input
-            className="h-9 w-full rounded-md border border-input px-3 font-mono outline-none focus-visible:border-ring"
-            inputMode="numeric"
-            pattern="\d*"
-            value={shipping}
-            onChange={(event) =>
-              setShipping(event.target.value.replace(/\D/g, ""))
-            }
-          />
-        </label>
-        <Button
-          variant="secondary"
-          type="button"
-          onClick={async () => {
-            await updateRoundShipping({
-              data: { roundId: round.id, shippingKr: parseKroner(shipping) },
-            })
-            setShippingSaved(true)
-            window.setTimeout(() => setShippingSaved(false), 1800)
-            await refresh()
-          }}
-        >
-          {shippingSaved ? "Lagret" : "Lagre frakt"}
-        </Button>
+      <EditRoundForm round={round} mode="settlement" refresh={refresh} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
+        <p className="text-sm text-muted-foreground">
+          Henteinfo og frakt kan justeres uten å endre bestillingene.
+        </p>
         <Button
           type="button"
           disabled={isReady}

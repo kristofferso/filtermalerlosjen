@@ -64,6 +64,7 @@ export const rounds = pgTable(
       .references(() => suppliers.id, { onDelete: "restrict" }),
     status: roundStatus("status").notNull().default("draft"),
     shippingKr: integer("shipping_kr").notNull().default(0),
+    pickupInstructions: text("pickup_instructions").notNull().default(""),
     openedAt: timestamp("opened_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),

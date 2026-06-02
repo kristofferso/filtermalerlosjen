@@ -43,6 +43,13 @@
       "when": 1779825832630,
       "tag": "0005_pale_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780387617346,
+      "tag": "0006_round_pickup_instructions",
+      "breakpoints": true
     }
   ]
 }
