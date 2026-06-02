@@ -24,3 +24,40 @@ export function getOrderStatusPillClasses(
 ) {
   return `${orderStatusPillBase} ${orderStatusPillClasses[kind][checked ? "checked" : "unchecked"]}`
 }
+
+type PickupChecklistItem = {
+  name: string
+  quantity: number
+}
+
+export type PickupChecklistState = Record<string, boolean>
+
+function getVisiblePickupItems(items: Array<PickupChecklistItem>) {
+  return items.filter((item) => item.quantity > 0)
+}
+
+export function getPickupChecklistInitialState(
+  items: Array<PickupChecklistItem>,
+  collected: boolean
+): PickupChecklistState {
+  return Object.fromEntries(
+    getVisiblePickupItems(items).map((item) => [item.name, collected])
+  )
+}
+
+export function getPickupChecklistSummary(
+  items: Array<PickupChecklistItem>,
+  checkedByName: PickupChecklistState
+) {
+  const visibleItems = getVisiblePickupItems(items)
+  const checkedCount = visibleItems.filter(
+    (item) => checkedByName[item.name]
+  ).length
+
+  return {
+    productCount: visibleItems.length,
+    checkedCount,
+    bagCount: visibleItems.reduce((sum, item) => sum + item.quantity, 0),
+    allChecked: visibleItems.length > 0 && checkedCount === visibleItems.length,
+  }
+}

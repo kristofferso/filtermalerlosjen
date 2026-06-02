@@ -17,6 +17,13 @@ import {
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,7 +37,11 @@ import {
   summarizeAdminRound,
 } from "@/lib/admin-rounds"
 import { formatKr, parseKroner } from "@/lib/money"
-import { getOrderStatusPillClasses } from "@/lib/admin-order-row-ui"
+import {
+  getOrderStatusPillClasses,
+  getPickupChecklistInitialState,
+  getPickupChecklistSummary,
+} from "@/lib/admin-order-row-ui"
 import {
   calculateCoffeeTotals,
   calculateRoundGrandTotals,
@@ -875,54 +886,6 @@ function RoundGrandMetrics({
   )
 }
 
-type CoffeeQuantityItem = {
-  name: string
-  imageUrl?: string
-  quantity: number
-}
-
-function CoffeeQuantitySection({
-  title,
-  items,
-  compact = false,
-}: {
-  title: string
-  items: Array<CoffeeQuantityItem>
-  compact?: boolean
-}) {
-  const visibleItems = items.filter((item) => item.quantity > 0)
-  if (visibleItems.length === 0) return null
-
-  return (
-    <section className="rounded-lg border border-border bg-muted/30 p-3">
-      <h3 className={compact ? "text-base" : "text-lg"}>{title}</h3>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {visibleItems.map((coffee) => (
-          <div
-            key={coffee.name}
-            className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-border bg-card p-2 text-sm"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              {coffee.imageUrl ? (
-                <img
-                  className="size-8 shrink-0 rounded object-cover"
-                  src={coffee.imageUrl}
-                  alt=""
-                  loading="lazy"
-                />
-              ) : (
-                <span className="size-8 shrink-0 rounded border border-border bg-muted" />
-              )}
-              <span className="truncate font-medium">{coffee.name}</span>
-            </span>
-            <span className="shrink-0 font-mono">{coffee.quantity} poser</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
   const [expanded, setExpanded] = useState(getDefaultBulkOrderExpanded())
   const items = calculateCoffeeTotals(orders)
@@ -1272,14 +1235,41 @@ function ClosedOrderRow({
   total: ReturnType<typeof calculateRoundTotals>[number]
   refresh: () => Promise<void>
 }) {
-  const [expanded, setExpanded] = useState(getDefaultOrderExpanded())
+  const [pickupOpen, setPickupOpen] = useState(false)
+  const [checkedByName, setCheckedByName] = useState(() =>
+    getPickupChecklistInitialState(total.items, total.collected)
+  )
   const [copied, setCopied] = useState(false)
+  const visibleItems = total.items.filter((item) => item.quantity > 0)
+  const pickupSummary = getPickupChecklistSummary(total.items, checkedByName)
+
+  function handlePickupOpenChange(open: boolean) {
+    setPickupOpen(open)
+    if (open) {
+      setCheckedByName(
+        getPickupChecklistInitialState(total.items, total.collected)
+      )
+    }
+  }
 
   async function copyPaymentLink() {
     const link = `${window.location.origin}/bestilling/${total.orderId}`
     await navigator.clipboard.writeText(link)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
+  }
+
+  async function markAsCollected() {
+    if (total.collected || !pickupSummary.allChecked) return
+    await updateOrderFlags({
+      data: {
+        orderId: total.orderId,
+        paid: total.paid,
+        collected: true,
+      },
+    })
+    await refresh()
+    setPickupOpen(false)
   }
 
   return (
@@ -1293,8 +1283,7 @@ function ClosedOrderRow({
         <div className="min-w-0">
           <p className="font-semibold">{total.customerName}</p>
           <p className="font-mono text-sm text-muted-foreground">
-            {total.items.reduce((sum, item) => sum + item.quantity, 0)} poser{" "}
-            {formatKr(total.totalKr)}
+            {pickupSummary.bagCount} poser {formatKr(total.totalKr)}
           </p>
           {total.pickupSlotLabel ? (
             <p className="mt-1 text-sm text-muted-foreground">
@@ -1344,38 +1333,104 @@ function ClosedOrderRow({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="secondary"
-            size="sm"
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((value) => !value)}
-          >
-            {expanded ? "Skjul" : "Detaljer"}
-          </Button>
+          <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
+            <DialogTrigger render={<Button variant="secondary" size="sm" />}>
+              Hentemodus
+            </DialogTrigger>
+            <DialogContent className="inset-0 top-0 left-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 sm:p-0">
+              <DialogHeader className="mb-0 border-b border-border px-4 py-4 pr-14 sm:px-6">
+                <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                  Hentemodus
+                </p>
+                <DialogTitle className="mt-1 text-3xl sm:text-4xl">
+                  {total.customerName} henter
+                </DialogTitle>
+                <p className="mt-2 font-mono text-sm text-muted-foreground">
+                  {pickupSummary.checkedCount} av {pickupSummary.productCount} produkter sjekket
+                </p>
+              </DialogHeader>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                {total.pickupSlotLabel ? (
+                  <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                    Henting: <span className="font-medium">{total.pickupSlotLabel}</span>
+                  </p>
+                ) : null}
+                <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {visibleItems.map((coffee) => {
+                    const checked = Boolean(checkedByName[coffee.name])
+                    return (
+                      <button
+                        key={coffee.name}
+                        className={`group grid min-h-72 gap-3 rounded-xl border text-left transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none ${checked
+                          ? "border-(--ledger-ink) bg-muted/50"
+                          : "border-border bg-card hover:bg-muted/30"
+                          }`}
+                        type="button"
+                        aria-pressed={checked}
+                        onClick={() =>
+                          setCheckedByName((current) => ({
+                            ...current,
+                            [coffee.name]: !current[coffee.name],
+                          }))
+                        }
+                      >
+                        <span className="relative overflow-hidden rounded-t-xl bg-muted p-1">
+                          {coffee.imageUrl ? (
+                            <img
+                              className="aspect-square w-full object-contain"
+                              src={coffee.imageUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span className="block aspect-square w-full" />
+                          )}
+                          <span className="absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm">
+                            {checked ? <Check className="size-5" /> : <Circle className="size-5" />}
+                          </span>
+                        </span>
+                        <span className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 p-3">
+                          <span className="min-w-0 text-lg font-semibold leading-tight">
+                            {coffee.name}
+                          </span>
+                          <span className="text-right">
+                            <span className="block font-serif text-5xl leading-none">
+                              {coffee.quantity}
+                            </span>
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="border-t border-border bg-card px-4 py-3 sm:px-6">
+                <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-mono text-sm text-muted-foreground">
+                    {pickupSummary.bagCount} poser totalt
+                  </p>
+                  <Button
+                    className="h-12 w-full text-base sm:w-auto sm:min-w-64"
+                    type="button"
+                    disabled={total.collected || !pickupSummary.allChecked}
+                    onClick={markAsCollected}
+                  >
+                    {total.collected ? "Allerede hentet" : "Merk som hentet"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
-      {expanded ? (
-        <div className="mt-3 border-t border-border pt-3">
-          <CoffeeQuantitySection
-            title={`Hentes av ${total.customerName}`}
-            items={total.items}
-            compact
-          />
-          {total.pickupSlotLabel ? (
-            <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-              Henting:{" "}
-              <span className="font-medium">{total.pickupSlotLabel}</span>
-            </p>
-          ) : null}
-          <div className="mt-3 grid gap-1 font-mono text-sm">
-            <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
-            <p>Frakt: {formatKr(total.shippingShareKr)}</p>
-            <p className="font-semibold">Totalt: {formatKr(total.totalKr)}</p>
-          </div>
-        </div>
-      ) : null}
+      <div className="mt-3 grid gap-2 border-t border-border pt-3 font-mono text-sm sm:grid-cols-3">
+        <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
+        <p>Frakt: {formatKr(total.shippingShareKr)}</p>
+        <p className="font-semibold">Totalt: {formatKr(total.totalKr)}</p>
+      </div>
     </article>
   )
 }
