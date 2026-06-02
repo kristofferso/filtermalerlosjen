@@ -109,10 +109,10 @@ export function OrderPickupSection({
             )}
           </div>
 
-          <div className="mt-6 border-t border-border pt-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="mt-8">
+            <div className="flex flex-wrap items-start justify-between gap-1">
               <div>
-                <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                <h3 className="text-base font-semibold tracking-tight text-foreground">
                   Velg tid
                 </h3>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">

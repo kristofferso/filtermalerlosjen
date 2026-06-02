@@ -101,7 +101,7 @@ function PaymentPage() {
 
 type PaymentOrder = NonNullable<Awaited<ReturnType<typeof getPaymentOrderData>>>
 
-function PaymentCard({
+export function PaymentCard({
   order,
   pickupSlots,
 }: {
@@ -153,7 +153,9 @@ function PaymentCard({
 
       <OrderPaymentSection order={order} />
 
-      <OrderPickupSection order={order} slots={pickupSlots} />
+      {order.roundStatus === "ready" ? (
+        <OrderPickupSection order={order} slots={pickupSlots} />
+      ) : null}
     </div>
   )
 }

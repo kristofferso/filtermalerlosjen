@@ -9,6 +9,12 @@ import {
   isCustomerUnlocked,
   selectCustomerSession,
 } from "./auth.server"
+import {
+  buildNotificationEmail,
+  buildOrderUrl,
+  buildRoundNotificationEmails,
+  sendNotificationEmail,
+} from "./notifications"
 import { db } from "@/db/client"
 import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 import { calculateRoundTotals } from "@/lib/order-totals"
@@ -215,6 +221,43 @@ async function getOrderSummaries(roundIds: Array<string>) {
   }
 
   return Array.from(byOrder.values())
+}
+
+function getNotificationBaseUrl() {
+  return process.env.APP_URL?.trim() || "http://localhost:3000"
+}
+
+async function sendCustomerNotification(
+  email: ReturnType<typeof buildNotificationEmail>
+) {
+  try {
+    await sendNotificationEmail(email)
+  } catch (error) {
+    console.error("Failed to send notification email", error)
+  }
+}
+
+async function notifyRoundCustomers(
+  kind: "payment-ready" | "pickup-ready",
+  roundId: string,
+  shippingKr: number
+) {
+  const orderSummaries = await getOrderSummaries([roundId])
+  const totals = calculateRoundTotals({ shippingKr, orders: orderSummaries })
+  const orderSummariesById = new Map(
+    orderSummaries.map((order) => [order.id, order])
+  )
+  const emails = buildRoundNotificationEmails({
+    kind,
+    baseUrl: getNotificationBaseUrl(),
+    orders: totals.map((total) => ({
+      ...total,
+      customerEmail:
+        orderSummariesById.get(total.orderId)?.customerEmail?.trim() || null,
+    })),
+  })
+
+  await Promise.all(emails.map((email) => sendCustomerNotification(email)))
 }
 
 async function getLatestCustomerStatusOrder(customerId: string) {
@@ -588,6 +631,7 @@ export const closeRound = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Open round not found")
+    await notifyRoundCustomers("payment-ready", round.id, round.shippingKr)
     return round
   })
 
@@ -621,6 +665,7 @@ export const markRoundReadyForPickup = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Closed round not found")
+    await notifyRoundCustomers("pickup-ready", round.id, round.shippingKr)
     return round
   })
 
@@ -717,6 +762,17 @@ export const submitOrder = createServerFn({ method: "POST" })
         priceKrSnapshot: byId.get(item.roundCoffeeId)?.priceKrSnapshot ?? 0,
       }))
     )
+
+    if (selectedCustomer.email.trim()) {
+      await sendCustomerNotification(
+        buildNotificationEmail({
+          kind: "order-confirmed",
+          to: selectedCustomer.email,
+          customerName: selectedCustomer.name,
+          orderUrl: buildOrderUrl(order.id, getNotificationBaseUrl()),
+        })
+      )
+    }
 
     return { ok: true, orderId: order.id }
   })
