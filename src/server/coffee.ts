@@ -82,6 +82,7 @@ const submitOrderSchema = z.object({
     })
   ),
 })
+const adminRoundDetailSchema = z.object({ roundId: uuidSchema })
 const archiveCoffeeSchema = z.object({ id: uuidSchema })
 const deleteOrderSchema = z.object({ orderId: uuidSchema })
 const updateOrderFlagsSchema = z.object({
@@ -338,8 +339,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
           .select()
           .from(rounds)
           .where(inArray(rounds.status, ["closed", "ready"]))
-          .orderBy(desc(rounds.closedAt))
-          .limit(10),
+          .orderBy(desc(rounds.closedAt)),
       ])
 
     const roundIds = [
@@ -388,6 +388,44 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
     }
   }
 )
+
+export const getAdminRoundDetail = createServerFn({ method: "GET" })
+  .inputValidator((input) => adminRoundDetailSchema.parse(input))
+  .handler(async ({ data }) => {
+    if (!(await isAdminUnlocked())) return { unlocked: false as const }
+
+    const roundRows = await db
+      .select()
+      .from(rounds)
+      .where(eq(rounds.id, data.roundId))
+      .limit(1)
+    const round = roundRows.at(0)
+    if (!round) return { unlocked: true as const, round: null }
+
+    const [supplierRows, roundCoffeeRows, orderRows] = await Promise.all([
+      db
+        .select()
+        .from(suppliers)
+        .where(eq(suppliers.id, round.supplierId))
+        .limit(1),
+      db
+        .select()
+        .from(roundCoffees)
+        .where(eq(roundCoffees.roundId, round.id))
+        .orderBy(roundCoffees.createdAt),
+      getOrderSummaries([round.id]),
+    ])
+
+    return {
+      unlocked: true as const,
+      round: {
+        ...round,
+        supplier: supplierRows.at(0) ?? null,
+        coffees: roundCoffeeRows,
+        orders: orderRows,
+      },
+    }
+  })
 
 export const addCoffee = createServerFn({ method: "POST" })
   .inputValidator((input) => addCoffeeSchema.parse(input))

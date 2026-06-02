@@ -13,6 +13,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
+import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
+import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
+import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -34,37 +37,83 @@ const BestillingOrderIdRoute = BestillingOrderIdRouteImport.update({
   path: '/bestilling/$orderId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminKunderRoute = AdminKunderRouteImport.update({
+  id: '/kunder',
+  path: '/kunder',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKaffeRoute = AdminKaffeRouteImport.update({
+  id: '/kaffe',
+  path: '/kaffe',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRunderRoundIdRoute = AdminRunderRoundIdRouteImport.update({
+  id: '/runder/$roundId',
+  path: '/runder/$roundId',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/admin/kaffe': typeof AdminKaffeRoute
+  '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/admin/kaffe': typeof AdminKaffeRoute
+  '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/admin/kaffe': typeof AdminKaffeRoute
+  '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/bestilling/$orderId'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/admin/kaffe'
+    | '/admin/kunder'
+    | '/bestilling/$orderId'
+    | '/admin/runder/$roundId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/bestilling/$orderId'
-  id: '__root__' | '/' | '/admin' | '/login' | '/bestilling/$orderId'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/admin/kaffe'
+    | '/admin/kunder'
+    | '/bestilling/$orderId'
+    | '/admin/runder/$roundId'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/admin/kaffe'
+    | '/admin/kunder'
+    | '/bestilling/$orderId'
+    | '/admin/runder/$roundId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   LoginRoute: typeof LoginRoute
   BestillingOrderIdRoute: typeof BestillingOrderIdRoute
 }
@@ -99,12 +148,47 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BestillingOrderIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/kunder': {
+      id: '/admin/kunder'
+      path: '/kunder'
+      fullPath: '/admin/kunder'
+      preLoaderRoute: typeof AdminKunderRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/kaffe': {
+      id: '/admin/kaffe'
+      path: '/kaffe'
+      fullPath: '/admin/kaffe'
+      preLoaderRoute: typeof AdminKaffeRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/runder/$roundId': {
+      id: '/admin/runder/$roundId'
+      path: '/runder/$roundId'
+      fullPath: '/admin/runder/$roundId'
+      preLoaderRoute: typeof AdminRunderRoundIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminKaffeRoute: typeof AdminKaffeRoute
+  AdminKunderRoute: typeof AdminKunderRoute
+  AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminKaffeRoute: AdminKaffeRoute,
+  AdminKunderRoute: AdminKunderRoute,
+  AdminRunderRoundIdRoute: AdminRunderRoundIdRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   LoginRoute: LoginRoute,
   BestillingOrderIdRoute: BestillingOrderIdRoute,
 }

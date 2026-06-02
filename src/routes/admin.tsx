@@ -1,8 +1,21 @@
 import { useState } from "react"
 import { Check, Circle, Copy, Trash2 } from "lucide-react"
-import { createFileRoute, useRouter } from "@tanstack/react-router"
+import {
+  Link,
+  Outlet,
+  createFileRoute,
+  useLocation,
+  useRouter,
+} from "@tanstack/react-router"
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
+import {
+  getAdminActionQueue,
+  getDefaultBulkOrderExpanded,
+  getDefaultOrderExpanded,
+  sortAdminOrderTotals,
+  summarizeAdminRound,
+} from "@/lib/admin-rounds"
 import { formatKr, parseKroner } from "@/lib/money"
 import {
   calculateCoffeeTotals,
@@ -17,7 +30,6 @@ import {
   closeRound,
   deleteOrder,
   getAdminDashboard,
-  markRoundReadyForPickup,
   openRound,
   updateCoffee,
   updateOrderFlags,
@@ -29,19 +41,22 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 })
 
-type Dashboard = Extract<
+export type Dashboard = Extract<
   Awaited<ReturnType<typeof getAdminDashboard>>,
   { unlocked: true }
 >
 type Coffee = Dashboard["coffees"][number]
 type Supplier = Dashboard["suppliers"][number]
-type Round =
+export type Round =
   | NonNullable<Dashboard["openRound"]>
   | Dashboard["closedRounds"][number]
 
 function AdminPage() {
   const data = Route.useLoaderData()
+  const location = useLocation()
   const router = useRouter()
+
+  if (location.pathname !== "/admin") return <Outlet />
 
   return (
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
@@ -58,7 +73,7 @@ function AdminPage() {
   )
 }
 
-function AdminHeader() {
+export function AdminHeader() {
   return (
     <header className="flex items-center justify-between border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
@@ -78,7 +93,7 @@ function AdminHeader() {
   )
 }
 
-function AdminPasswordForm({
+export function AdminPasswordForm({
   onUnlocked,
 }: {
   onUnlocked: () => Promise<void>
@@ -146,10 +161,13 @@ function DashboardView({
         {dashboard.openRound ? (
           <OpenRoundSection round={dashboard.openRound} refresh={refresh} />
         ) : (
-          <CatalogSection dashboard={dashboard} refresh={refresh} />
+          <StartRoundSection dashboard={dashboard} refresh={refresh} />
         )}
-        <HistorySection rounds={dashboard.closedRounds} refresh={refresh} />
-        <CustomersSection customers={dashboard.customers} />
+        <AdminIndexLinks dashboard={dashboard} />
+        <RoundsCardList
+          currentRound={dashboard.openRound}
+          closedRounds={dashboard.closedRounds}
+        />
       </div>
       <StatusRail dashboard={dashboard} />
     </div>
@@ -157,91 +175,43 @@ function DashboardView({
 }
 
 function StatusRail({ dashboard }: { dashboard: Dashboard }) {
+  const items = getAdminActionQueue({
+    openRound: dashboard.openRound,
+    closedRounds: dashboard.closedRounds,
+  })
+
   return (
     <aside className="space-y-3 lg:sticky lg:top-5">
-      <CurrentRoundStats round={dashboard.openRound} />
-      <LastRoundStats rounds={dashboard.closedRounds} />
-    </aside>
-  )
-}
-
-function CurrentRoundStats({ round }: { round: Dashboard["openRound"] }) {
-  const orders = round?.orders ?? []
-  const bagCount = countBags(orders)
-
-  return (
-    <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
-      <div className="flex items-center justify-between border-b border-border pb-3">
-        <div>
+      <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
+        <div className="border-b border-border pb-3">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            NÅ
+            Kø
           </p>
-          <h2 className="mt-1 text-lg">Aktiv runde</h2>
+          <h2 className="mt-1 text-lg">Neste handling</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Kun punkter som krever oppmerksomhet.
+          </p>
         </div>
-        <StatusPill
-          active={Boolean(round)}
-          label={round ? "Aktiv" : "Stengt"}
-        />
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <RailMetric
-          label="Leverandør"
-          value={round?.supplier ? round.supplier.name : "Ingen"}
-        />
-        <RailMetric label="Ordre" value={orders.length} />
-        <RailMetric label="Poser" value={bagCount} />
-        <RailMetric label="Kaffe" value={round?.coffees.length ?? 0} />
-        <RailMetric
-          label="Stenger"
-          value={formatDate(round?.closesAt ?? null)}
-        />
-      </div>
-    </section>
-  )
-}
-
-function LastRoundStats({ rounds }: { rounds: Dashboard["closedRounds"] }) {
-  const hasLastRound = rounds.length > 0
-  const lastRound = rounds[0]
-  const orders = hasLastRound ? lastRound.orders : []
-  const paidCount = orders.filter((order) => order.paid).length
-  const collectedCount = orders.filter((order) => order.collected).length
-
-  return (
-    <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
-      <div className="border-b border-border pb-3">
-        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-          SISTE
-        </p>
-        <h2 className="mt-1 text-lg">Forrige oppgjør</h2>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <RailMetric
-          label="Leverandør"
-          value={
-            hasLastRound && lastRound.supplier
-              ? lastRound.supplier.name
-              : "Ingen"
-          }
-        />
-        <RailMetric label="Ordre" value={orders.length} />
-        <RailMetric label="Betalt" value={`${paidCount}/${orders.length}`} />
-        <RailMetric
-          label="Hentet"
-          value={`${collectedCount}/${orders.length}`}
-        />
-        <RailMetric label="Arkiv" value={rounds.length} />
-        <RailMetric label="Poser" value={countBags(orders)} />
-      </div>
-    </section>
-  )
-}
-
-function countBags(orders: Round["orders"]) {
-  return orders.reduce(
-    (sum, order) =>
-      sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-    0
+        <div className="mt-4 space-y-2">
+          {items.map((item) => (
+            <div
+              key={`${item.label}-${item.value}`}
+              className="rounded-md border border-border p-3"
+            >
+              <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+                {item.label}
+              </p>
+              <p
+                className={`mt-1 text-sm font-medium ${item.tone === "attention" ? "text-destructive" : ""
+                  }`}
+              >
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </aside>
   )
 }
 
@@ -262,7 +232,40 @@ function RailMetric({
   )
 }
 
-function CatalogSection({
+function StartRoundSection({
+  dashboard,
+  refresh,
+}: {
+  dashboard: Dashboard
+  refresh: () => Promise<void>
+}) {
+  return (
+    <section
+      id="ny-runde"
+      className="rounded-lg border border-(--ledger-line) bg-card"
+    >
+      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+        <SectionTitle
+          kicker="START"
+          title="Ny runde"
+          subtitle="Åpne detaljer når du skal starte neste bestilling."
+        />
+      </div>
+      <details className="group">
+        <summary className="cursor-pointer list-none p-4 text-sm font-medium text-muted-foreground hover:text-foreground sm:p-5">
+          <span className="rounded-md border border-border px-3 py-2 group-open:bg-muted/50">
+            Start ny runde
+          </span>
+        </summary>
+        <div className="border-t border-border">
+          <RoundStarter dashboard={dashboard} refresh={refresh} />
+        </div>
+      </details>
+    </section>
+  )
+}
+
+function RoundStarter({
   dashboard,
   refresh,
 }: {
@@ -270,19 +273,14 @@ function CatalogSection({
   refresh: () => Promise<void>
 }) {
   const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
-  const [showInactive, setShowInactive] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [closesAt, setClosesAt] = useState("")
   const selectedSupplier =
     dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
     dashboard.suppliers[0]
-  const supplierCoffees = dashboard.coffees.filter(
-    (coffee) => coffee.supplierId === selectedSupplier.id
+  const visibleCoffees = dashboard.coffees.filter(
+    (coffee) => coffee.supplierId === selectedSupplier.id && coffee.isActive
   )
-  const visibleCoffees = supplierCoffees.filter(
-    (coffee) => showInactive || coffee.isActive
-  )
-  const lastPrice = supplierCoffees[0]?.priceKr ?? 139
 
   function toggleCoffee(id: string) {
     setSelectedIds((current) =>
@@ -303,13 +301,117 @@ function CatalogSection({
     await refresh()
   }
 
+
+
+  return (
+    <div className="space-y-4 p-4 sm:p-5">
+      <div className="flex flex-wrap gap-2">
+        {dashboard.suppliers.map((supplier) => (
+          <Button
+            key={supplier.id}
+            variant={
+              supplier.id === selectedSupplier.id ? "default" : "outline"
+            }
+            size="sm"
+            type="button"
+            onClick={() => {
+              setSupplierId(supplier.id)
+              setSelectedIds([])
+            }}
+          >
+            {supplier.name}
+          </Button>
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-lg border border-border">
+        {visibleCoffees.map((coffee) => (
+          <button
+            key={coffee.id}
+            className="grid w-full gap-3 border-b border-border p-3 text-left last:border-b-0 hover:bg-muted/60 sm:grid-cols-[minmax(0,1fr)_7rem_6rem] sm:items-center"
+            type="button"
+            onClick={() => toggleCoffee(coffee.id)}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              {coffee.imageUrl ? (
+                <img
+                  className="size-11 shrink-0 rounded-md object-cover"
+                  src={coffee.imageUrl}
+                  alt={coffee.name}
+                  loading="lazy"
+                />
+              ) : (
+                <span className="size-11 shrink-0 rounded-md border border-border bg-muted" />
+              )}
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">
+                  {coffee.name}
+                </span>
+                <span className="block truncate text-sm text-muted-foreground">
+                  {coffee.description || "Ingen beskrivelse"}
+                </span>
+              </span>
+            </span>
+            <span className="font-mono text-sm font-semibold">
+              {formatKr(coffee.priceKr)}
+            </span>
+            <StatusPill
+              active={selectedIds.includes(coffee.id)}
+              label={selectedIds.includes(coffee.id) ? "Valgt" : "Legg til"}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <label className="space-y-1">
+          <span className="text-sm font-medium">Stenger (valgfritt)</span>
+          <input
+            className="h-10 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            type="datetime-local"
+            value={closesAt}
+            onChange={(event) => setClosesAt(event.target.value)}
+          />
+        </label>
+        <Button
+          className="w-full sm:w-auto"
+          size="lg"
+          disabled={selectedIds.length === 0}
+          onClick={handleOpenRound}
+          type="button"
+        >
+          Åpne runde med {selectedIds.length} kaffe
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function CatalogSection({
+  dashboard,
+  refresh,
+}: {
+  dashboard: Dashboard
+  refresh: () => Promise<void>
+}) {
+  const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
+  const [showInactive, setShowInactive] = useState(false)
+  const selectedSupplier =
+    dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
+    dashboard.suppliers[0]
+  const supplierCoffees = dashboard.coffees.filter(
+    (coffee) => coffee.supplierId === selectedSupplier.id
+  )
+  const visibleCoffees = supplierCoffees.filter(
+    (coffee) => showInactive || coffee.isActive
+  )
+  const lastPrice = supplierCoffees[0]?.priceKr ?? 139
+
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
         <SectionTitle
           kicker="01"
           title="Kaffe"
-          subtitle="Velg leverandør. Marker varelinjer."
+          subtitle="Legg til, rediger og arkiver kaffelinjer."
         />
       </div>
       <div className="space-y-4 p-4 sm:p-5">
@@ -322,10 +424,7 @@ function CatalogSection({
               }
               size="sm"
               type="button"
-              onClick={() => {
-                setSupplierId(supplier.id)
-                setSelectedIds([])
-              }}
+              onClick={() => setSupplierId(supplier.id)}
             >
               {supplier.name}
             </Button>
@@ -343,13 +442,7 @@ function CatalogSection({
 
         <div className="overflow-hidden rounded-lg border border-border pt-4">
           {visibleCoffees.map((coffee) => (
-            <CoffeeRow
-              key={coffee.id}
-              coffee={coffee}
-              selected={selectedIds.includes(coffee.id)}
-              onToggle={() => toggleCoffee(coffee.id)}
-              refresh={refresh}
-            />
+            <CoffeeRow key={coffee.id} coffee={coffee} refresh={refresh} />
           ))}
           {visibleCoffees.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">
@@ -361,32 +454,9 @@ function CatalogSection({
         <AddCoffeeForm
           supplier={selectedSupplier}
           defaultPriceKr={lastPrice}
-          onAdded={(coffee) =>
-            setSelectedIds((current) => [...current, coffee.id])
-          }
+          onAdded={() => undefined}
           refresh={refresh}
         />
-
-        <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Stenger (valgfritt)</span>
-            <input
-              className="h-10 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-              type="datetime-local"
-              value={closesAt}
-              onChange={(event) => setClosesAt(event.target.value)}
-            />
-          </label>
-          <Button
-            className="w-full sm:w-auto"
-            size="lg"
-            disabled={selectedIds.length === 0}
-            onClick={handleOpenRound}
-            type="button"
-          >
-            Åpne runde med {selectedIds.length} kaffe
-          </Button>
-        </div>
       </div>
     </section>
   )
@@ -394,24 +464,16 @@ function CatalogSection({
 
 function CoffeeRow({
   coffee,
-  selected,
-  onToggle,
   refresh,
 }: {
   coffee: Coffee
-  selected: boolean
-  onToggle: () => void
   refresh: () => Promise<void>
 }) {
   const [isEditing, setIsEditing] = useState(false)
 
   return (
     <div className="border-b border-border last:border-b-0">
-      <button
-        className="grid w-full gap-3 p-3 text-left hover:bg-muted/60 sm:grid-cols-[minmax(0,1fr)_7rem_6rem] sm:items-center"
-        type="button"
-        onClick={onToggle}
-      >
+      <div className="grid w-full gap-3 p-3 text-left sm:grid-cols-[minmax(0,1fr)_7rem_6rem] sm:items-center">
         <span className="flex min-w-0 items-center gap-3">
           {coffee.imageUrl ? (
             <img
@@ -437,13 +499,11 @@ function CoffeeRow({
         </span>
         <span className="justify-self-start sm:justify-self-end">
           <StatusPill
-            active={selected}
-            label={
-              selected ? "Valgt" : coffee.isActive ? "Legg til" : "Inaktiv"
-            }
+            active={coffee.isActive}
+            label={coffee.isActive ? "Aktiv" : "Inaktiv"}
           />
         </span>
-      </button>
+      </div>
       <div className="mt-2 flex gap-3 border-t border-border px-3 pt-3 pb-3">
         <Button
           variant="secondary"
@@ -614,7 +674,7 @@ function EditCoffeeForm({
   )
 }
 
-function OpenRoundSection({
+export function OpenRoundSection({
   round,
   refresh,
 }: {
@@ -630,7 +690,7 @@ function OpenRoundSection({
     <section className="rounded-lg border border-(--ledger-line) bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
         <SectionTitle
-          kicker="02"
+          kicker="ARKIV"
           title="Bestilling"
           subtitle={`${round.supplier?.name}. Runde aktiv.`}
         />
@@ -656,7 +716,7 @@ function OpenRoundSection({
   )
 }
 
-function EditRoundForm({
+export function EditRoundForm({
   round,
   mode,
   refresh,
@@ -699,18 +759,6 @@ function EditRoundForm({
       onSubmit={handleSubmit}
       className="space-y-3 rounded-lg border border-border bg-muted/30 p-3"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-medium">Rediger runde</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Rundeinfo deles av alle bestillinger i denne runden.
-          </p>
-        </div>
-        <Button variant="secondary" type="submit">
-          {saved ? "Lagret" : "Lagre runde"}
-        </Button>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2">
         {mode === "open" ? (
           <label className="space-y-1">
@@ -762,6 +810,9 @@ function EditRoundForm({
           {copied ? "Kopiert" : "Kopier henteinfo"}
         </Button>
       </div>
+      <Button variant="secondary" type="submit">
+        {saved ? "Lagret" : "Lagre runde"}
+      </Button>
     </form>
   )
 }
@@ -861,11 +912,58 @@ function CoffeeQuantitySection({
 }
 
 function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
+  const [expanded, setExpanded] = useState(getDefaultBulkOrderExpanded())
+  const items = calculateCoffeeTotals(orders)
+  const visibleItems = items.filter((item) => item.quantity > 0)
+  const bagCount = visibleItems.reduce((sum, item) => sum + item.quantity, 0)
+
+  if (visibleItems.length === 0) return null
+
   return (
-    <CoffeeQuantitySection
-      title="Samlet ordre"
-      items={calculateCoffeeTotals(orders)}
-    />
+    <section className="rounded-lg border border-border bg-muted/30">
+      <button
+        className="flex w-full items-center justify-between gap-3 p-3 text-left"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>
+          <span className="block text-lg">Samlet ordre</span>
+          <span className="font-mono text-sm text-muted-foreground">
+            {bagCount} poser · {visibleItems.length} kaffe
+          </span>
+        </span>
+        <span className="font-mono text-sm text-muted-foreground">
+          {expanded ? "Skjul" : "Detaljer"}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="grid gap-2 border-t border-border p-3 sm:grid-cols-2">
+          {visibleItems.map((coffee) => (
+            <div
+              key={coffee.name}
+              className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-border bg-card p-2 text-sm"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                {coffee.imageUrl ? (
+                  <img
+                    className="size-8 shrink-0 rounded object-cover"
+                    src={coffee.imageUrl}
+                    alt=""
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="size-8 shrink-0 rounded border border-border bg-muted" />
+                )}
+                <span className="truncate font-medium">{coffee.name}</span>
+              </span>
+              <span className="shrink-0 font-mono">
+                {coffee.quantity} poser
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -892,56 +990,82 @@ function OrderList({
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {orders.map((order) => {
-        const total = totalsByOrderId.get(order.id)
-        const bagCount =
-          total?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
-
-        return (
-          <article
-            key={order.id}
-            className="border-b border-border p-3 last:border-b-0"
-          >
-            <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-              <div>
-                <h3 className="text-lg">{order.customerName}</h3>
-                <p className="font-mono text-sm text-muted-foreground">
-                  {bagCount} poser · {formatKr(total?.totalKr ?? 0)}
-                </p>
-              </div>
-              <ul className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                {order.items.map((item) => (
-                  <li
-                    key={`${order.id}-${item.name}`}
-                    className="rounded-md border border-border bg-muted/30 px-2 py-1"
-                  >
-                    <span className="font-mono text-foreground">
-                      {item.quantity} ×
-                    </span>{" "}
-                    {item.name}
-                  </li>
-                ))}
-              </ul>
-              <Button
-                variant="destructive"
-                size="xs"
-                type="button"
-                onClick={async () => {
-                  await deleteOrder({ data: { orderId: order.id } })
-                  await refresh()
-                }}
-              >
-                Slett
-              </Button>
-            </div>
-          </article>
-        )
-      })}
+      {orders.map((order) => (
+        <ActiveOrderRow
+          key={order.id}
+          order={order}
+          total={totalsByOrderId.get(order.id)}
+          refresh={refresh}
+        />
+      ))}
     </div>
   )
 }
 
-function CustomersSection({
+function ActiveOrderRow({
+  order,
+  total,
+  refresh,
+}: {
+  order: Round["orders"][number]
+  total: ReturnType<typeof calculateRoundTotals>[number] | undefined
+  refresh: () => Promise<void>
+}) {
+  const [expanded, setExpanded] = useState(getDefaultOrderExpanded())
+  const bagCount =
+    total?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
+
+  return (
+    <article className="border-b border-border p-3 last:border-b-0">
+      <button
+        className="grid w-full gap-3 text-left sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span>
+          <span className="block text-lg">{order.customerName}</span>
+          <span className="font-mono text-sm text-muted-foreground">
+            {bagCount} poser · {formatKr(total?.totalKr ?? 0)}
+          </span>
+        </span>
+        <span className="self-center justify-self-start font-mono text-sm text-muted-foreground sm:justify-self-end">
+          {expanded ? "Skjul" : "Detaljer"}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <ul className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+            {order.items.map((item) => (
+              <li
+                key={`${order.id}-${item.name}`}
+                className="rounded-md border border-border bg-muted/30 px-2 py-1"
+              >
+                <span className="font-mono text-foreground">
+                  {item.quantity} ×
+                </span>{" "}
+                {item.name}
+              </li>
+            ))}
+          </ul>
+          <Button
+            className="mt-3"
+            variant="destructive"
+            size="xs"
+            type="button"
+            onClick={async () => {
+              await deleteOrder({ data: { orderId: order.id } })
+              await refresh()
+            }}
+          >
+            Slett
+          </Button>
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+export function CustomersSection({
   customers,
 }: {
   customers: Dashboard["customers"]
@@ -990,58 +1114,111 @@ function CustomersSection({
   )
 }
 
-function HistorySection({
-  rounds,
-  refresh,
+function RoundsCardList({
+  currentRound,
+  closedRounds,
 }: {
-  rounds: Dashboard["closedRounds"]
-  refresh: () => Promise<void>
+  currentRound: Dashboard["openRound"]
+  closedRounds: Dashboard["closedRounds"]
 }) {
-  const [selectedRoundId, setSelectedRoundId] = useState(rounds[0]?.id ?? "")
-  const selectedRound =
-    rounds.find((round) => round.id === selectedRoundId) ?? rounds[0]
+  const rounds = currentRound ? [currentRound, ...closedRounds] : closedRounds
 
   return (
-    <section className="rounded-lg border border-(--ledger-line) bg-card">
+    <section
+      id="admin-runder"
+      className="rounded-lg border border-(--ledger-line) bg-card"
+    >
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
         <SectionTitle
-          kicker="03"
-          title="Oppgjør"
-          subtitle="Siste runde vises først."
+          kicker="02"
+          title="Runder"
+          subtitle="Alle runder som kompakte kort. Åpne detaljer ved behov."
         />
         <span className="font-mono text-xs text-muted-foreground">
-          {rounds.length} arkiv
+          {rounds.length} runder
         </span>
       </div>
-      <div className="space-y-4 p-4 sm:p-5">
+      <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3">
         {rounds.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Ingen avsluttede runder.
-          </p>
+          <p className="text-sm text-muted-foreground">Ingen runder ennå.</p>
         ) : null}
-        {rounds.length > 0 ? (
-          <select
-            className="h-9 w-full rounded-md border border-input py-0 pr-10 pl-3 text-sm outline-none focus-visible:border-ring"
-            value={selectedRound.id}
-            onChange={(event) => setSelectedRoundId(event.target.value)}
-          >
-            {rounds.map((round) => (
-              <option key={round.id} value={round.id}>
-                {round.supplier ? round.supplier.name : "Ukjent"}{" "}
-                {formatDate(round.closedAt)}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        {rounds.length > 0 ? (
-          <ClosedRoundSummary round={selectedRound} refresh={refresh} />
-        ) : null}
+        {rounds.map((round) => (
+          <RoundCard key={round.id} round={round} />
+        ))}
       </div>
     </section>
   )
 }
 
-function ClosedRoundSummary({
+function RoundCard({ round }: { round: Round }) {
+  const summary = summarizeAdminRound(round)
+
+  return (
+    <Link
+      to="/admin/runder/$roundId"
+      params={{ roundId: round.id }}
+      className="rounded-lg border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium">{summary.supplierName}</p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">
+            {formatDate(summary.date)}
+          </p>
+        </div>
+        <StatusPill
+          active={round.status === "open"}
+          label={summary.statusLabel}
+        />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Meta label="Ordre" value={summary.orderCount} />
+        <Meta label="Poser" value={summary.bagCount} />
+        <Meta
+          label="Betalt"
+          value={`${summary.paidCount}/${summary.orderCount}`}
+        />
+        <Meta
+          label="Hentet"
+          value={`${summary.collectedCount}/${summary.orderCount}`}
+        />
+      </div>
+    </Link>
+  )
+}
+
+function AdminIndexLinks({ dashboard }: { dashboard: Dashboard }) {
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Link
+        to="/admin/kaffe"
+        className="rounded-lg border border-(--ledger-line) bg-card p-4 hover:bg-muted/30"
+      >
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          Arkiv
+        </p>
+        <h2 className="mt-1 text-lg">Kaffekatalog</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {dashboard.coffees.length} varer. Legg til, rediger og arkiver kaffe.
+        </p>
+      </Link>
+      <Link
+        to="/admin/kunder"
+        className="rounded-lg border border-(--ledger-line) bg-card p-4 hover:bg-muted/30"
+      >
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          Tilgang
+        </p>
+        <h2 className="mt-1 text-lg">Kunder</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {dashboard.customers.length} registrerte personer.
+        </p>
+      </Link>
+    </section>
+  )
+}
+
+export function ClosedRoundSummary({
   round,
   refresh,
 }: {
@@ -1065,28 +1242,10 @@ function ClosedRoundSummary({
 
       <RoundGrandMetrics shippingKr={round.shippingKr} orders={round.orders} />
 
-      <EditRoundForm round={round} mode="settlement" refresh={refresh} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
-        <p className="text-sm text-muted-foreground">
-          Henteinfo og frakt kan justeres uten å endre bestillingene.
-        </p>
-        <Button
-          type="button"
-          disabled={isReady}
-          onClick={async () => {
-            await markRoundReadyForPickup({ data: { roundId: round.id } })
-            await refresh()
-          }}
-        >
-          {isReady ? "Klar for henting" : "Merk klar for henting"}
-        </Button>
-      </div>
-
       <BulkCoffeeTotals orders={round.orders} />
 
       <div className="overflow-hidden rounded-lg border border-border">
-        {totals.map((total) => (
+        {sortAdminOrderTotals(totals).map((total) => (
           <ClosedOrderRow key={total.orderId} total={total} refresh={refresh} />
         ))}
       </div>
@@ -1101,7 +1260,7 @@ function ClosedOrderRow({
   total: ReturnType<typeof calculateRoundTotals>[number]
   refresh: () => Promise<void>
 }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(getDefaultOrderExpanded())
   const [copied, setCopied] = useState(false)
 
   async function copyPaymentLink() {
@@ -1241,11 +1400,10 @@ function StatusPill({ active, label }: { active: boolean; label: string }) {
 function PaymentStatusPill({ checked }: { checked: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${
-        checked
-          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
+        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+        : "border-slate-200 bg-slate-50 text-slate-600"
+        }`}
     >
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Betalt" : "Ikke betalt"}
@@ -1256,11 +1414,10 @@ function PaymentStatusPill({ checked }: { checked: boolean }) {
 function PickupStatusPill({ checked }: { checked: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${
-        checked
-          ? "border-sky-200 bg-sky-50 text-sky-800"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
+        ? "border-sky-200 bg-sky-50 text-sky-800"
+        : "border-slate-200 bg-slate-50 text-slate-600"
+        }`}
     >
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Hentet" : "Ikke hentet"}

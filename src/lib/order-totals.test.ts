@@ -18,7 +18,12 @@ describe("calculateCoffeeTotals", () => {
           paid: false,
           collected: false,
           items: [
-            { name: "Kenya", imageUrl: "https://example.com/kenya.jpg", quantity: 2, priceKr: 100 },
+            {
+              name: "Kenya",
+              imageUrl: "https://example.com/kenya.jpg",
+              quantity: 2,
+              priceKr: 100,
+            },
             { name: "Brazil", imageUrl: "", quantity: 1, priceKr: 120 },
           ],
         },
@@ -27,12 +32,24 @@ describe("calculateCoffeeTotals", () => {
           customerName: "Marius",
           paid: false,
           collected: false,
-          items: [{ name: "Kenya", imageUrl: "https://example.com/kenya.jpg", quantity: 3, priceKr: 100 }],
+          items: [
+            {
+              name: "Kenya",
+              imageUrl: "https://example.com/kenya.jpg",
+              quantity: 3,
+              priceKr: 100,
+            },
+          ],
         },
-      ]),
+      ])
     ).toEqual([
-      { name: "Kenya", imageUrl: "https://example.com/kenya.jpg", quantity: 5, totalKr: 500 },
-      { name: "Brazil", imageUrl: "", quantity: 1, totalKr: 120 },
+      {
+        name: "Kenya",
+        imageUrl: "https://example.com/kenya.jpg",
+        quantity: 5,
+        totalKr: 575,
+      },
+      { name: "Brazil", imageUrl: "", quantity: 1, totalKr: 138 },
     ])
   })
 })
@@ -63,22 +80,24 @@ describe("calculateRoundTotals", () => {
       {
         orderId: "order-1",
         customerName: "Anna",
-        coffeeSubtotalKr: 200,
+        coffeeSubtotalKr: 230,
+        coffeeVatKr: 30,
         shippingShareKr: 30,
-        totalKr: 230,
+        totalKr: 260,
         paid: false,
         collected: false,
-        items: [{ name: "Kenya", quantity: 2, priceKr: 100, subtotalKr: 200 }],
+        items: [{ name: "Kenya", quantity: 2, priceKr: 100, subtotalKr: 230 }],
       },
       {
         orderId: "order-2",
         customerName: "Marius",
-        coffeeSubtotalKr: 120,
+        coffeeSubtotalKr: 138,
+        coffeeVatKr: 18,
         shippingShareKr: 30,
-        totalKr: 150,
+        totalKr: 168,
         paid: true,
         collected: false,
-        items: [{ name: "Brazil", quantity: 1, priceKr: 120, subtotalKr: 120 }],
+        items: [{ name: "Brazil", quantity: 1, priceKr: 120, subtotalKr: 138 }],
       },
     ])
   })
