@@ -7,6 +7,7 @@ export type RoundTotalsInput = {
     customerName: string
     paid: boolean
     collected: boolean
+    pickupSlotLabel?: string
     items: Array<{
       name: string
       imageUrl?: string
@@ -32,6 +33,7 @@ export type OrderTotal = {
   totalKr: number
   paid: boolean
   collected: boolean
+  pickupSlotLabel?: string
   items: Array<{
     name: string
     imageUrl?: string
@@ -164,6 +166,9 @@ export function calculateRoundTotals(
       totalKr: coffeeSubtotalKr + shippingShareKr,
       paid: order.paid,
       collected: order.collected,
+      ...(order.pickupSlotLabel
+        ? { pickupSlotLabel: order.pickupSlotLabel }
+        : {}),
       items,
     }
   })

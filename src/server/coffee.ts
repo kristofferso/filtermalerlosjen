@@ -13,6 +13,7 @@ import { db } from "@/db/client"
 import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 import { calculateRoundTotals } from "@/lib/order-totals"
 import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
+import { fetchPickupSlotsFromIcsCalendar } from "@/lib/pickup-slots"
 import {
   coffees,
   customers,
@@ -90,6 +91,10 @@ const updateOrderFlagsSchema = z.object({
   paid: z.boolean(),
   collected: z.boolean(),
 })
+const updateOrderPickupSlotSchema = z.object({
+  orderId: uuidSchema,
+  pickupSlotId: z.string().trim(),
+})
 
 async function getOpenRoundRecord() {
   const openRoundRows = await db
@@ -98,6 +103,22 @@ async function getOpenRoundRecord() {
     .where(eq(rounds.status, "open"))
     .limit(1)
   return openRoundRows.at(0) ?? null
+}
+
+async function getConfiguredPickupSlots() {
+  const debug = process.env.PICKUP_DEBUG === "true"
+  const calendarUrl = process.env.PICKUP_CALENDAR_ICS_URL
+  if (!calendarUrl) {
+    if (debug) console.info("[pickup-slots] config:missing-url")
+    return []
+  }
+
+  return fetchPickupSlotsFromIcsCalendar({
+    url: calendarUrl,
+    keyword: process.env.PICKUP_EVENT_KEYWORD ?? "Henting",
+    maxDaysAhead: Number(process.env.PICKUP_MAX_DAYS_AHEAD ?? 14),
+    debug,
+  })
 }
 
 function groupBy<T, TKey>(items: Array<T>, getKey: (item: T) => TKey) {
@@ -154,6 +175,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
       customerEmail: string | null
       paid: boolean
       collected: boolean
+      pickupSlotLabel: string
       createdAt: Date
       items: Array<{
         name: string
@@ -175,6 +197,7 @@ async function getOrderSummaries(roundIds: Array<string>) {
         customerEmail: row.order.customerEmail,
         paid: row.order.paid,
         collected: row.order.collected,
+        pickupSlotLabel: row.order.pickupSlotLabel,
         createdAt: row.order.createdAt,
         items: [],
       }
@@ -698,6 +721,59 @@ export const submitOrder = createServerFn({ method: "POST" })
     return { ok: true, orderId: order.id }
   })
 
+export const getAvailablePickupSlots = createServerFn({
+  method: "GET",
+}).handler(async () => {
+  if (!(await isCustomerUnlocked())) throw new Error("Customer access required")
+
+  return getConfiguredPickupSlots()
+})
+
+export const updateOrderPickupSlot = createServerFn({ method: "POST" })
+  .inputValidator((input) => updateOrderPickupSlotSchema.parse(input))
+  .handler(async ({ data }) => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const selectedCustomerId = await getSelectedCustomerId()
+    if (!selectedCustomerId) throw new Error("Velg hvem som bestiller")
+
+    const selectedSlotId = data.pickupSlotId.trim()
+    const selectedSlot = selectedSlotId
+      ? (await getConfiguredPickupSlots()).find(
+          (slot) => slot.id === selectedSlotId
+        )
+      : null
+    if (selectedSlotId && !selectedSlot)
+      throw new Error("Hentetiden er ikke tilgjengelig")
+
+    const orderRows = await db
+      .update(orders)
+      .set({
+        pickupSlotId: selectedSlot?.id ?? "",
+        pickupSlotLabel: selectedSlot?.label ?? "",
+        pickupStartsAt: selectedSlot ? new Date(selectedSlot.startsAt) : null,
+        pickupEndsAt: selectedSlot ? new Date(selectedSlot.endsAt) : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(orders.id, data.orderId),
+          eq(orders.customerId, selectedCustomerId)
+        )
+      )
+      .returning()
+    const order = orderRows.at(0)
+    if (!order) throw new Error("Bestillingen finnes ikke")
+
+    return {
+      pickupSlotId: order.pickupSlotId,
+      pickupSlotLabel: order.pickupSlotLabel,
+      pickupStartsAt: order.pickupStartsAt,
+      pickupEndsAt: order.pickupEndsAt,
+    }
+  })
+
 export const getPaymentOrderData = createServerFn({ method: "GET" })
   .inputValidator((input) => z.object({ orderId: uuidSchema }).parse(input))
   .handler(async ({ data }) => {
@@ -754,6 +830,10 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
       totalKr: total.totalKr,
       vippsUrl,
       pickupInstructions: row.round.pickupInstructions,
+      pickupSlotId: row.order.pickupSlotId,
+      pickupSlotLabel: row.order.pickupSlotLabel,
+      pickupStartsAt: row.order.pickupStartsAt,
+      pickupEndsAt: row.order.pickupEndsAt,
     }
   })
 

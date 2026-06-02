@@ -135,6 +135,10 @@ export const orders = pgTable(
     customerEmail: text("customer_email"),
     paid: boolean("paid").notNull().default(false),
     collected: boolean("collected").notNull().default(false),
+    pickupSlotId: text("pickup_slot_id").notNull().default(""),
+    pickupSlotLabel: text("pickup_slot_label").notNull().default(""),
+    pickupStartsAt: timestamp("pickup_starts_at", { withTimezone: true }),
+    pickupEndsAt: timestamp("pickup_ends_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => ({

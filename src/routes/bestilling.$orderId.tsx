@@ -1,14 +1,18 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router"
 import { ChevronLeft } from "lucide-react"
+import type { PickupSlot } from "@/lib/pickup-slots"
 import { BrandLogo } from "@/components/brand"
+import { OrderPaymentSection } from "@/components/order-payment-section"
+import { OrderPickupSection } from "@/components/order-pickup-section"
 import { OrderStatusStepper } from "@/components/order-status-stepper"
-import { buttonVariants } from "@/components/ui/button"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { formatKr } from "@/lib/money"
-import { markdownToSafeHtml } from "@/lib/markdown"
 import { getCustomerOrderStatus } from "@/lib/order-totals"
 import { getCustomerRouteAccess } from "@/server/customer-access"
-import { getPaymentOrderData } from "@/server/coffee"
+import {
+  getAvailablePickupSlots,
+  getPaymentOrderData,
+} from "@/server/coffee"
 
 export const Route = createFileRoute("/bestilling/$orderId")({
   loader: async ({ location, params }) => {
@@ -20,13 +24,17 @@ export const Route = createFileRoute("/bestilling/$orderId")({
     })
     if (loginRedirect) throw redirect(loginRedirect)
 
-    return getPaymentOrderData({ data: { orderId: params.orderId } })
+    const [order, pickupSlots] = await Promise.all([
+      getPaymentOrderData({ data: { orderId: params.orderId } }),
+      getAvailablePickupSlots(),
+    ])
+    return { order, pickupSlots }
   },
   component: PaymentPage,
 })
 
 function PaymentPage() {
-  const order = Route.useLoaderData()
+  const { order, pickupSlots } = Route.useLoaderData()
 
   return (
     <main className="min-h-svh text-foreground">
@@ -65,16 +73,20 @@ function PaymentPage() {
             <h1 className="mt-3 font-serif text-4xl font-normal tracking-tight text-balance sm:text-5xl">
               {order
                 ? getCustomerOrderStatus({
-                  roundStatus:
-                    order.roundStatus === "ready" ? "ready" : "closed",
-                  paid: order.paid,
-                  collected: order.collected,
-                })
+                    roundStatus:
+                      order.roundStatus === "ready" ? "ready" : "closed",
+                    paid: order.paid,
+                    collected: order.collected,
+                  })
                 : "Din bestilling"}
             </h1>
           </div>
 
-          {!order ? <MissingOrder /> : <PaymentCard order={order} />}
+          {!order ? (
+            <MissingOrder />
+          ) : (
+            <PaymentCard order={order} pickupSlots={pickupSlots} />
+          )}
         </div>
 
         <BrandLogo
@@ -89,7 +101,13 @@ function PaymentPage() {
 
 type PaymentOrder = NonNullable<Awaited<ReturnType<typeof getPaymentOrderData>>>
 
-function PaymentCard({ order }: { order: PaymentOrder }) {
+function PaymentCard({
+  order,
+  pickupSlots,
+}: {
+  order: PaymentOrder
+  pickupSlots: Array<PickupSlot>
+}) {
   return (
     <div className="mt-8">
       <div className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
@@ -133,42 +151,10 @@ function PaymentCard({ order }: { order: PaymentOrder }) {
         <SummaryLine label="Totalt" value={formatKr(order.totalKr)} strong />
       </div>
 
-      <PickupInstructions instructions={order.pickupInstructions} />
+      <OrderPaymentSection order={order} />
 
-      <div className="mt-6 border-t border-border pt-6">
-        {order.paid ? null : order.vippsUrl ? (
-          <a
-            className={buttonVariants({ className: "w-full", size: "lg" })}
-            href={order.vippsUrl}
-          >
-            Betal med Vipps
-          </a>
-        ) : (
-          <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-            Betaling er ikke konfigurert ennå.
-          </p>
-        )}
-      </div>
+      <OrderPickupSection order={order} slots={pickupSlots} />
     </div>
-  )
-}
-
-function PickupInstructions({ instructions }: { instructions: string }) {
-  const trimmedInstructions = instructions.trim()
-  if (!trimmedInstructions) return null
-
-  return (
-    <details className="mt-5 rounded-lg border border-border bg-muted/20 p-4">
-      <summary className="cursor-pointer select-none text-sm font-semibold marker:text-muted-foreground">
-        Hvor henter jeg?
-      </summary>
-      <div
-        className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground [&_a]:font-medium [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_li]:ml-5 [&_li]:list-disc [&_p]:max-w-prose [&_strong]:text-foreground"
-        dangerouslySetInnerHTML={{
-          __html: markdownToSafeHtml(trimmedInstructions),
-        }}
-      />
-    </details>
   )
 }
 

@@ -1,5 +1,12 @@
 import { useState } from "react"
-import { Check, Circle, Copy, Trash2 } from "lucide-react"
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  Copy,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react"
 import {
   Link,
   Outlet,
@@ -10,6 +17,12 @@ import {
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   getAdminActionQueue,
   getDefaultBulkOrderExpanded,
   getDefaultOrderExpanded,
@@ -17,6 +30,7 @@ import {
   summarizeAdminRound,
 } from "@/lib/admin-rounds"
 import { formatKr, parseKroner } from "@/lib/money"
+import { getOrderStatusPillClasses } from "@/lib/admin-order-row-ui"
 import {
   calculateCoffeeTotals,
   calculateRoundGrandTotals,
@@ -300,8 +314,6 @@ function RoundStarter({
     })
     await refresh()
   }
-
-
 
   return (
     <div className="space-y-4 p-4 sm:p-5">
@@ -811,7 +823,7 @@ export function EditRoundForm({
         </Button>
       </div>
       <Button variant="secondary" type="submit">
-        {saved ? "Lagret" : "Lagre runde"}
+        {saved ? "Lagret" : "Lagre"}
       </Button>
     </form>
   )
@@ -1271,27 +1283,78 @@ function ClosedOrderRow({
   }
 
   return (
-    <article className="border-b border-border p-3 last:border-b-0">
-      <button
-        className="grid w-full gap-3 text-left sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <span>
-          <span className="block font-semibold">{total.customerName}</span>
-          <span className="font-mono text-sm text-muted-foreground">
-            {total.items.reduce((sum, item) => sum + item.quantity, 0)} poser{" "}
-            {formatKr(total.totalKr)}
-          </span>
-        </span>
-        <span className="flex flex-wrap items-center gap-2">
+    <article className="relative border-b border-border bg-card/40 p-3 last:border-b-0">
+      <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex flex-wrap items-center gap-2 sm:max-w-40">
           <PaymentStatusPill checked={total.paid} />
           <PickupStatusPill checked={total.collected} />
-        </span>
-        <span className="self-center justify-self-start font-mono text-sm text-muted-foreground sm:justify-self-end">
-          {expanded ? "Skjul" : "Detaljer"}
-        </span>
-      </button>
+        </div>
+
+        <div className="min-w-0">
+          <p className="font-semibold">{total.customerName}</p>
+          <p className="font-mono text-sm text-muted-foreground">
+            {total.items.reduce((sum, item) => sum + item.quantity, 0)} poser{" "}
+            {formatKr(total.totalKr)}
+          </p>
+          {total.pickupSlotLabel ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Henting: {total.pickupSlotLabel}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-2 sm:justify-self-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+              <MoreHorizontal className="size-4" />
+              Handlinger
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-56">
+              <DropdownMenuItem
+                onClick={async () => {
+                  await updateOrderFlags({
+                    data: {
+                      orderId: total.orderId,
+                      paid: !total.paid,
+                      collected: total.collected,
+                    },
+                  })
+                  await refresh()
+                }}
+              >
+                {total.paid ? "Merk som ikke betalt" : "Merk som betalt"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  await updateOrderFlags({
+                    data: {
+                      orderId: total.orderId,
+                      paid: total.paid,
+                      collected: !total.collected,
+                    },
+                  })
+                  await refresh()
+                }}
+              >
+                {total.collected ? "Merk som ikke hentet" : "Merk som hentet"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={copyPaymentLink}>
+                {copied ? "Kopiert" : "Kopier bestillingslenke"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "Skjul" : "Detaljer"}
+          </Button>
+        </div>
+      </div>
 
       {expanded ? (
         <div className="mt-3 border-t border-border pt-3">
@@ -1300,54 +1363,16 @@ function ClosedOrderRow({
             items={total.items}
             compact
           />
+          {total.pickupSlotLabel ? (
+            <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              Henting:{" "}
+              <span className="font-medium">{total.pickupSlotLabel}</span>
+            </p>
+          ) : null}
           <div className="mt-3 grid gap-1 font-mono text-sm">
             <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
             <p>Frakt: {formatKr(total.shippingShareKr)}</p>
             <p className="font-semibold">Totalt: {formatKr(total.totalKr)}</p>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant={total.paid ? "default" : "secondary"}
-              size="sm"
-              type="button"
-              onClick={async () => {
-                await updateOrderFlags({
-                  data: {
-                    orderId: total.orderId,
-                    paid: !total.paid,
-                    collected: total.collected,
-                  },
-                })
-                await refresh()
-              }}
-            >
-              Er betalt
-            </Button>
-            <Button
-              variant={total.collected ? "default" : "secondary"}
-              size="sm"
-              type="button"
-              onClick={async () => {
-                await updateOrderFlags({
-                  data: {
-                    orderId: total.orderId,
-                    paid: total.paid,
-                    collected: !total.collected,
-                  },
-                })
-                await refresh()
-              }}
-            >
-              Er hentet
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={copyPaymentLink}
-            >
-              {copied ? "Kopiert" : "Kopier bestillingslenke"}
-            </Button>
           </div>
         </div>
       ) : null}
@@ -1399,12 +1424,7 @@ function StatusPill({ active, label }: { active: boolean; label: string }) {
 
 function PaymentStatusPill({ checked }: { checked: boolean }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
-        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-        : "border-slate-200 bg-slate-50 text-slate-600"
-        }`}
-    >
+    <span className={getOrderStatusPillClasses("payment", checked)}>
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Betalt" : "Ikke betalt"}
     </span>
@@ -1413,12 +1433,7 @@ function PaymentStatusPill({ checked }: { checked: boolean }) {
 
 function PickupStatusPill({ checked }: { checked: boolean }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs ${checked
-        ? "border-sky-200 bg-sky-50 text-sky-800"
-        : "border-slate-200 bg-slate-50 text-slate-600"
-        }`}
-    >
+    <span className={getOrderStatusPillClasses("pickup", checked)}>
       {checked ? <Check className="size-3" /> : <Circle className="size-3" />}
       {checked ? "Hentet" : "Ikke hentet"}
     </span>

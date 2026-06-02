@@ -50,6 +50,13 @@
       "when": 1780387617346,
       "tag": "0006_round_pickup_instructions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780407558789,
+      "tag": "0007_awesome_cannonball",
+      "breakpoints": true
     }
   ]
 }
