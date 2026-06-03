@@ -7,6 +7,28 @@ export type PickupSlot = {
   label: string
 }
 
+export type PickupSlotGroup = {
+  dateLabel: string
+  slots: Array<PickupSlot>
+}
+
+export type PickupSelectionOrder = {
+  id: string
+  customerName: string
+  collected?: boolean
+  pickupSlotId?: string | null
+  pickupStartsAt?: Date | string | null
+  pickupEndsAt?: Date | string | null
+  items?: Array<{ quantity: number }>
+}
+
+export type PickupWindowSelection<TOrder extends PickupSelectionOrder> =
+  PickupSlot & {
+    orders: Array<TOrder>
+    orderCount: number
+    bagCount: number
+  }
+
 type ParsePickupSlotsOptions = {
   now?: Date
   keyword: string
@@ -33,6 +55,61 @@ type IcsDateValue = {
 }
 
 const OSLO_TIME_ZONE = "Europe/Oslo"
+
+export function groupPickupSlotsByDate(
+  slots: Array<PickupSlot>
+): Array<PickupSlotGroup> {
+  return slots.reduce<Array<PickupSlotGroup>>((groups, slot) => {
+    const existing = groups.find((group) => group.dateLabel === slot.dateLabel)
+    if (existing) {
+      existing.slots.push(slot)
+    } else {
+      groups.push({ dateLabel: slot.dateLabel, slots: [slot] })
+    }
+    return groups
+  }, [])
+}
+
+export function getNextPickupWindowSelections<
+  TOrder extends PickupSelectionOrder,
+>({
+  slots,
+  orders,
+  limit = 2,
+  now = new Date(),
+}: {
+  slots: Array<PickupSlot>
+  orders: Array<TOrder>
+  limit?: number
+  now?: Date
+}): Array<PickupWindowSelection<TOrder>> {
+  return mergePickupSlotsWithOrderSnapshots(slots, orders)
+    .filter((slot) => {
+      const endsAt = new Date(slot.endsAt).getTime()
+      return Number.isFinite(endsAt) && endsAt >= now.getTime()
+    })
+    .sort((left, right) => left.startsAt.localeCompare(right.startsAt))
+    .slice(0, limit)
+    .map((slot) => {
+      const slotOrders = orders
+        .filter((order) => orderMatchesPickupSlot(order, slot))
+        .sort(sortPickupSelectionOrders)
+      return {
+        ...slot,
+        orders: slotOrders,
+        orderCount: slotOrders.length,
+        bagCount: slotOrders.reduce(
+          (sum, order) =>
+            sum +
+            (order.items ?? []).reduce(
+              (itemSum, item) => itemSum + Math.max(0, item.quantity),
+              0
+            ),
+          0
+        ),
+      }
+    })
+}
 
 export function parsePickupSlotsFromIcs(
   ics: string,
@@ -135,6 +212,77 @@ export function getPickupSlotLabel({
   const startDate = new Date(startsAt)
   const endDate = new Date(endsAt)
   return `${formatPickupDate(startDate)}, ${formatPickupTime(startDate)}–${formatPickupTime(endDate)}`
+}
+
+function mergePickupSlotsWithOrderSnapshots(
+  slots: Array<PickupSlot>,
+  orders: Array<PickupSelectionOrder>
+) {
+  const byId = new Map(slots.map((slot) => [slot.id, slot]))
+
+  for (const order of orders) {
+    const snapshot = buildPickupSlotFromOrderSnapshot(order)
+    if (!snapshot || byId.has(snapshot.id)) continue
+    byId.set(snapshot.id, snapshot)
+  }
+
+  return Array.from(byId.values())
+}
+
+function buildPickupSlotFromOrderSnapshot(
+  order: PickupSelectionOrder
+): PickupSlot | null {
+  if (!order.pickupStartsAt || !order.pickupEndsAt) return null
+
+  const startsAt = toComparableIso(order.pickupStartsAt)
+  const endsAt = toComparableIso(order.pickupEndsAt)
+  if (!startsAt || !endsAt) return null
+
+  const startDate = new Date(startsAt)
+  const endDate = new Date(endsAt)
+  const dateLabel = formatPickupDate(startDate)
+  const timeLabel = `${formatPickupTime(startDate)}–${formatPickupTime(endDate)}`
+
+  return {
+    id: order.pickupSlotId || `${startsAt}-${endsAt}`,
+    startsAt,
+    endsAt,
+    dateLabel,
+    timeLabel,
+    label: `${dateLabel}, ${timeLabel}`,
+  }
+}
+
+function orderMatchesPickupSlot(
+  order: PickupSelectionOrder,
+  slot: PickupSlot
+) {
+  const slotIdMatches = Boolean(
+    order.pickupSlotId && order.pickupSlotId === slot.id
+  )
+  if (slotIdMatches) return true
+  if (!order.pickupStartsAt || !order.pickupEndsAt) return false
+
+  return (
+    toComparableIso(order.pickupStartsAt) === slot.startsAt &&
+    toComparableIso(order.pickupEndsAt) === slot.endsAt
+  )
+}
+
+function sortPickupSelectionOrders(
+  left: PickupSelectionOrder,
+  right: PickupSelectionOrder
+) {
+  return (
+    Number(left.collected) - Number(right.collected) ||
+    left.customerName.localeCompare(right.customerName, "nb-NO")
+  )
+}
+
+function toComparableIso(value: Date | string) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ""
+  return date.toISOString()
 }
 
 function buildPickupSlot({

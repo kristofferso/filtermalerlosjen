@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest"
 import {
   fetchPickupSlotsFromIcsCalendar,
+  getNextPickupWindowSelections,
   getPickupSlotLabel,
+  groupPickupSlotsByDate,
   parsePickupSlotsFromIcs,
 } from "./pickup-slots"
 
@@ -134,6 +136,108 @@ END:VCALENDAR`,
     expect(slot.id).toBe(
       "[HENTING] ettermiddag-2026-06-04T16:00:00.000Z-2026-06-04T18:00:00.000Z"
     )
+  })
+})
+
+describe("pickup slot grouping helpers", () => {
+  const slots = [
+    {
+      id: "slot-1",
+      startsAt: "2026-06-04T16:00:00.000Z",
+      endsAt: "2026-06-04T18:00:00.000Z",
+      dateLabel: "torsdag 4. juni",
+      timeLabel: "18:00–20:00",
+      label: "torsdag 4. juni, 18:00–20:00",
+    },
+    {
+      id: "slot-2",
+      startsAt: "2026-06-04T18:00:00.000Z",
+      endsAt: "2026-06-04T20:00:00.000Z",
+      dateLabel: "torsdag 4. juni",
+      timeLabel: "20:00–22:00",
+      label: "torsdag 4. juni, 20:00–22:00",
+    },
+    {
+      id: "slot-3",
+      startsAt: "2026-06-05T16:00:00.000Z",
+      endsAt: "2026-06-05T18:00:00.000Z",
+      dateLabel: "fredag 5. juni",
+      timeLabel: "18:00–20:00",
+      label: "fredag 5. juni, 18:00–20:00",
+    },
+  ]
+
+  test("groups slots by date for the customer picker", () => {
+    expect(groupPickupSlotsByDate(slots)).toEqual([
+      { dateLabel: "torsdag 4. juni", slots: [slots[0], slots[1]] },
+      { dateLabel: "fredag 5. juni", slots: [slots[2]] },
+    ])
+  })
+
+  test("returns the next two windows with selected pickup orders", () => {
+    const windows = getNextPickupWindowSelections({
+      slots,
+      now: NOW,
+      orders: [
+        {
+          id: "order-2",
+          customerName: "Bente",
+          pickupSlotId: "slot-1",
+          collected: true,
+          items: [{ quantity: 2 }],
+        },
+        {
+          id: "order-1",
+          customerName: "Anders",
+          pickupSlotId: "slot-1",
+          collected: false,
+          items: [{ quantity: 1 }, { quantity: 3 }],
+        },
+        {
+          id: "order-3",
+          customerName: "Carina",
+          pickupSlotId: "slot-3",
+          collected: false,
+          items: [{ quantity: 4 }],
+        },
+      ],
+    })
+
+    expect(windows).toHaveLength(2)
+    expect(windows.map((window) => window.id)).toEqual(["slot-1", "slot-2"])
+    expect(windows[0].orders.map((order) => order.customerName)).toEqual([
+      "Anders",
+      "Bente",
+    ])
+    expect(windows[0].orderCount).toBe(2)
+    expect(windows[0].bagCount).toBe(6)
+    expect(windows[1].orders).toEqual([])
+  })
+
+  test("uses saved pickup snapshots when the calendar slot is absent", () => {
+    const windows = getNextPickupWindowSelections({
+      slots: [],
+      now: NOW,
+      orders: [
+        {
+          id: "order-1",
+          customerName: "Anders",
+          pickupSlotId: "saved-slot",
+          pickupStartsAt: new Date("2026-06-06T09:00:00.000Z"),
+          pickupEndsAt: new Date("2026-06-06T11:00:00.000Z"),
+          items: [{ quantity: 2 }],
+        },
+      ],
+    })
+
+    expect(windows).toMatchObject([
+      {
+        id: "saved-slot",
+        label: "lørdag 6. juni, 11:00–13:00",
+        orderCount: 1,
+        bagCount: 2,
+      },
+    ])
   })
 })
 

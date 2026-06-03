@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useRouter } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import {
   AdminHeader,
   AdminPasswordForm,
@@ -31,12 +31,6 @@ function AdminRoundDetailPage() {
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl space-y-5">
         <AdminHeader />
-        <Link
-          to="/admin"
-          className="inline-flex rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/60"
-        >
-          Tilbake til admin
-        </Link>
         {!data.unlocked ? (
           <AdminPasswordForm onUnlocked={() => router.invalidate()} />
         ) : null}
@@ -67,7 +61,7 @@ function AdminRoundDetailPage() {
                     {data.round.closedAt ? ` ${new Date(data.round.closedAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}` : ""}
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Full oppgjørsd"etalj med ordre lukket som standard.
+                    Alle detaljer og ordre for denne runden.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

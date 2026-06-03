@@ -39,14 +39,14 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+export function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="no">
       <head>
         <HeadContent />
       </head>
       <body>
-        {children}
+        <div className="pb-12 sm:pb-16">{children}</div>
         {import.meta.env.DEV ? (
           <TanStackDevtools
             config={{

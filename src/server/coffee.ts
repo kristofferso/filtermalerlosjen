@@ -176,12 +176,16 @@ async function getOrderSummaries(roundIds: Array<string>) {
     {
       id: string
       roundId: string
+      customerId: string | null
       customerName: string
       customerPhone: string | null
       customerEmail: string | null
       paid: boolean
       collected: boolean
+      pickupSlotId: string
       pickupSlotLabel: string
+      pickupStartsAt: Date | null
+      pickupEndsAt: Date | null
       createdAt: Date
       items: Array<{
         name: string
@@ -198,12 +202,16 @@ async function getOrderSummaries(roundIds: Array<string>) {
       orderSummary = {
         id: row.order.id,
         roundId: row.order.roundId,
+        customerId: row.order.customerId,
         customerName: row.order.customerName,
         customerPhone: row.order.customerPhone,
         customerEmail: row.order.customerEmail,
         paid: row.order.paid,
         collected: row.order.collected,
+        pickupSlotId: row.order.pickupSlotId,
         pickupSlotLabel: row.order.pickupSlotLabel,
+        pickupStartsAt: row.order.pickupStartsAt,
+        pickupEndsAt: row.order.pickupEndsAt,
         createdAt: row.order.createdAt,
         items: [],
       }
@@ -391,22 +399,29 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await isAdminUnlocked())) return { unlocked: false as const }
 
-    const [supplierRows, coffeeRows, customerRows, openRound, closedRoundRows] =
-      await Promise.all([
-        db.select().from(suppliers).orderBy(suppliers.name),
-        db
-          .select()
-          .from(coffees)
-          .where(eq(coffees.isDeleted, false))
-          .orderBy(desc(coffees.createdAt)),
-        db.select().from(customers).orderBy(customers.name),
-        getOpenRoundRecord(),
-        db
-          .select()
-          .from(rounds)
-          .where(inArray(rounds.status, ["closed", "ready"]))
-          .orderBy(desc(rounds.closedAt)),
-      ])
+    const [
+      supplierRows,
+      coffeeRows,
+      customerRows,
+      openRound,
+      closedRoundRows,
+      pickupSlots,
+    ] = await Promise.all([
+      db.select().from(suppliers).orderBy(suppliers.name),
+      db
+        .select()
+        .from(coffees)
+        .where(eq(coffees.isDeleted, false))
+        .orderBy(desc(coffees.createdAt)),
+      db.select().from(customers).orderBy(customers.name),
+      getOpenRoundRecord(),
+      db
+        .select()
+        .from(rounds)
+        .where(inArray(rounds.status, ["closed", "ready"]))
+        .orderBy(desc(rounds.closedAt)),
+      getConfiguredPickupSlots(),
+    ])
 
     const roundIds = [
       ...(openRound ? [openRound.id] : []),
@@ -437,6 +452,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
       suppliers: supplierRows,
       coffees: coffeeRows,
       customers: customerRows,
+      pickupSlots,
       openRound: openRound
         ? {
             ...openRound,

@@ -57,6 +57,15 @@ export function summarizeAdminRound(round: AdminRound) {
   }
 }
 
+export function getRoundArchiveSections<TRound>(rounds: Array<TRound>) {
+  const [latestRound, ...archivedRounds] = rounds
+
+  return {
+    latestRound: latestRound ?? null,
+    archivedRounds,
+  }
+}
+
 export function getDefaultOrderExpanded() {
   return false
 }
@@ -81,7 +90,8 @@ export function getAdminActionQueue({
   closedRounds,
 }: AdminActionQueueInput): Array<AdminActionQueueItem> {
   const queue: Array<AdminActionQueueItem> = []
-  const operationalRound = openRound ?? closedRounds[0] ?? null
+  const latestClosedRound = closedRounds.at(0) ?? null
+  const operationalRound = openRound ?? latestClosedRound
 
   if (openRound?.closesAt) {
     queue.push({
@@ -111,7 +121,7 @@ export function getAdminActionQueue({
     })
   }
 
-  const settlementRound = closedRounds[0] ?? null
+  const settlementRound = latestClosedRound
   if (settlementRound) {
     const unpaidCount = settlementRound.orders.filter(
       (order) => !order.paid

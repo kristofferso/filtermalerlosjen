@@ -55,12 +55,13 @@ describe("calculateCoffeeTotals", () => {
 })
 
 describe("calculateRoundTotals", () => {
-  it("carries pickup slot snapshots into order totals", () => {
+  it("carries customer and pickup slot snapshots into order totals", () => {
     const [total] = calculateRoundTotals({
       shippingKr: 0,
       orders: [
         {
           id: "order-1",
+          customerId: "customer-1",
           customerName: "Anna",
           paid: false,
           collected: false,
@@ -70,6 +71,7 @@ describe("calculateRoundTotals", () => {
       ],
     })
 
+    expect(total.customerId).toBe("customer-1")
     expect(total.pickupSlotLabel).toBe("lørdag 6. juni, 11:00–13:00")
   })
 

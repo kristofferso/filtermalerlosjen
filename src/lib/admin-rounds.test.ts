@@ -3,6 +3,7 @@ import {
   getAdminActionQueue,
   getDefaultBulkOrderExpanded,
   getDefaultOrderExpanded,
+  getRoundArchiveSections,
   sortAdminOrderTotals,
   summarizeAdminRound,
 } from "./admin-rounds"
@@ -56,6 +57,29 @@ describe("summarizeAdminRound", () => {
     expect(summary.supplierName).toBe("Ukjent")
     expect(summary.statusLabel).toBe("Aktiv")
     expect(summary.date).toEqual(new Date("2026-05-04T18:00:00Z"))
+  })
+})
+
+describe("getRoundArchiveSections", () => {
+  test("lifts the first round as latest and keeps the rest for archive", () => {
+    const sections = getRoundArchiveSections([
+      { id: "latest", status: "ready" },
+      { id: "old-1", status: "closed" },
+      { id: "old-2", status: "closed" },
+    ])
+
+    expect(sections.latestRound?.id).toBe("latest")
+    expect(sections.archivedRounds.map((round) => round.id)).toEqual([
+      "old-1",
+      "old-2",
+    ])
+  })
+
+  test("handles no rounds", () => {
+    expect(getRoundArchiveSections([])).toEqual({
+      latestRound: null,
+      archivedRounds: [],
+    })
   })
 })
 

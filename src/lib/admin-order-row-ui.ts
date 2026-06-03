@@ -1,3 +1,5 @@
+import { formatKr } from "./money"
+
 export type OrderStatusKind = "payment" | "pickup"
 
 const orderStatusPillBase =
@@ -60,4 +62,30 @@ export function getPickupChecklistSummary(
     bagCount: visibleItems.reduce((sum, item) => sum + item.quantity, 0),
     allChecked: visibleItems.length > 0 && checkedCount === visibleItems.length,
   }
+}
+
+export function shouldOfferPickupMode(collected: boolean) {
+  return !collected
+}
+
+export function getPickupScannerTone(checked: boolean) {
+  return checked
+    ? { frequencyHz: 1320, durationMs: 70, label: "checked" as const }
+    : { frequencyHz: 220, durationMs: 110, label: "unchecked" as const }
+}
+
+export function getOrderMoneyDetailRows({
+  coffeeSubtotalKr,
+  shippingShareKr,
+  totalKr,
+}: {
+  coffeeSubtotalKr: number
+  shippingShareKr: number
+  totalKr: number
+}) {
+  return [
+    { label: "Kaffe", value: formatKr(coffeeSubtotalKr), emphasis: false },
+    { label: "Frakt", value: formatKr(shippingShareKr), emphasis: false },
+    { label: "Totalt", value: formatKr(totalKr), emphasis: true },
+  ]
 }

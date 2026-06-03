@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useRouter } from "@tanstack/react-router"
 import { Check, ChevronDown } from "lucide-react"
 import type { PickupSlot } from "@/lib/pickup-slots"
+import { groupPickupSlotsByDate } from "@/lib/pickup-slots"
 import { markdownToSafeHtml } from "@/lib/markdown"
 import {
   DropdownMenu,
@@ -34,17 +35,7 @@ export function OrderPickupSection({
 
   const trimmedInstructions = order.pickupInstructions.trim()
   const selectedSlot = slots.find((slot) => slot.id === order.pickupSlotId)
-  const slotsByDate = slots.reduce<
-    Array<{ dateLabel: string; slots: Array<PickupSlot> }>
-  >((groups, slot) => {
-    const existing = groups.find((group) => group.dateLabel === slot.dateLabel)
-    if (existing) {
-      existing.slots.push(slot)
-    } else {
-      groups.push({ dateLabel: slot.dateLabel, slots: [slot] })
-    }
-    return groups
-  }, [])
+  const slotsByDate = groupPickupSlotsByDate(slots)
 
   async function selectSlot(slot: PickupSlot) {
     const selected = slot.id === order.pickupSlotId

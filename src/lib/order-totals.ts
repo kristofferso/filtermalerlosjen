@@ -4,6 +4,7 @@ export type RoundTotalsInput = {
   shippingKr: number
   orders: Array<{
     id: string
+    customerId?: string | null
     customerName: string
     paid: boolean
     collected: boolean
@@ -26,6 +27,7 @@ export type CoffeeTotal = {
 
 export type OrderTotal = {
   orderId: string
+  customerId?: string
   customerName: string
   coffeeSubtotalKr: number
   coffeeVatKr: number
@@ -159,6 +161,7 @@ export function calculateRoundTotals(
 
     return {
       orderId: order.id,
+      ...(order.customerId ? { customerId: order.customerId } : {}),
       customerName: order.customerName,
       coffeeSubtotalKr,
       coffeeVatKr,

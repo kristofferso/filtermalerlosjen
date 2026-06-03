@@ -1,5 +1,6 @@
 import { useState } from "react"
 import {
+  ArrowRight,
   Check,
   ChevronDown,
   Circle,
@@ -33,14 +34,24 @@ import {
   getAdminActionQueue,
   getDefaultBulkOrderExpanded,
   getDefaultOrderExpanded,
+  getRoundArchiveSections,
   sortAdminOrderTotals,
   summarizeAdminRound,
 } from "@/lib/admin-rounds"
-import { formatKr, parseKroner } from "@/lib/money"
 import {
+  getCustomerEmailHref,
+  getCustomerPhoneHref,
+  getCustomerRowClasses,
+} from "@/lib/admin-customer-ui"
+import { formatKr, parseKroner } from "@/lib/money"
+import { getNextPickupWindowSelections } from "@/lib/pickup-slots"
+import {
+  getOrderMoneyDetailRows,
   getOrderStatusPillClasses,
   getPickupChecklistInitialState,
   getPickupChecklistSummary,
+  getPickupScannerTone,
+  shouldOfferPickupMode,
 } from "@/lib/admin-order-row-ui"
 import {
   calculateCoffeeTotals,
@@ -99,8 +110,11 @@ function AdminPage() {
 }
 
 export function AdminHeader() {
+  const location = useLocation()
+  const showAdminBackLink = location.pathname !== "/admin"
+
   return (
-    <header className="flex items-center justify-between border-b border-(--ledger-line) py-4">
+    <header className="flex items-center justify-between gap-4 border-b border-(--ledger-line) py-4">
       <div className="flex items-center gap-3">
         <div>
           <p className="font-mono text-[0.68rem] tracking-[0.22em] text-muted-foreground uppercase">
@@ -111,9 +125,16 @@ export function AdminHeader() {
           </h1>
         </div>
       </div>
-      <p className="hidden font-mono text-xs text-muted-foreground sm:block">
-        Driftsprotokoll
-      </p>
+      <nav className="flex items-center gap-3" aria-label="Adminnavigasjon">
+        {showAdminBackLink ? (
+          <Link
+            to="/admin"
+            className="inline-flex rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+          >
+            Tilbake til admin
+          </Link>
+        ) : null}
+      </nav>
     </header>
   )
 }
@@ -200,13 +221,25 @@ function DashboardView({
 }
 
 function StatusRail({ dashboard }: { dashboard: Dashboard }) {
+  const latestClosedRound = dashboard.closedRounds.at(0) ?? null
+  const unpaidOrders = sortOrdersByCustomerName(
+    latestClosedRound?.orders.filter((order) => !order.paid) ?? []
+  )
+  const uncollectedOrders = sortOrdersByCustomerName(
+    latestClosedRound?.orders.filter((order) => !order.collected) ?? []
+  )
+  const listedWorkCount = unpaidOrders.length + uncollectedOrders.length
   const items = getAdminActionQueue({
     openRound: dashboard.openRound,
     closedRounds: dashboard.closedRounds,
-  })
+  }).filter(
+    (item) =>
+      !["Ikke betalt", "Ikke hentet"].includes(item.label) &&
+      !(listedWorkCount > 0 && item.label === "Ingen åpne punkter")
+  )
 
   return (
-    <aside className="space-y-3 lg:sticky lg:top-5">
+    <aside className="lg:sticky lg:top-5">
       <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
         <div className="border-b border-border pb-3">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
@@ -217,6 +250,7 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
             Kun punkter som krever oppmerksomhet.
           </p>
         </div>
+
         <div className="mt-4 space-y-2">
           {items.map((item) => (
             <div
@@ -227,16 +261,136 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
                 {item.label}
               </p>
               <p
-                className={`mt-1 text-sm font-medium ${item.tone === "attention" ? "text-destructive" : ""
-                  }`}
+                className={`mt-1 text-sm font-medium ${
+                  item.tone === "attention" ? "text-destructive" : ""
+                }`}
               >
                 {item.value}
               </p>
             </div>
           ))}
+          {listedWorkCount === 0 && items.length === 0 ? (
+            <div className="rounded-md border border-border p-3">
+              <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+                Ingen åpne punkter
+              </p>
+              <p className="mt-1 text-sm font-medium">Alt ser ryddig ut</p>
+            </div>
+          ) : null}
+          {unpaidOrders.length > 0 ? (
+            <PendingCustomerCard label="Ikke betalt" orders={unpaidOrders} />
+          ) : null}
+          {uncollectedOrders.length > 0 ? (
+            <PendingCustomerCard label="Ikke hentet" orders={uncollectedOrders} />
+          ) : null}
         </div>
+
+        <PickupWindowBlock dashboard={dashboard} />
       </section>
     </aside>
+  )
+}
+
+function sortOrdersByCustomerName<TOrder extends { customerName: string }>(
+  orders: Array<TOrder>
+) {
+  return [...orders].sort((left, right) =>
+    left.customerName.localeCompare(right.customerName, "nb-NO")
+  )
+}
+
+function PendingCustomerCard<TOrder extends { customerName: string }>({
+  label,
+  orders,
+}: {
+  label: string
+  orders: Array<TOrder>
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+          {label}
+        </p>
+        <span className="font-mono text-xs text-muted-foreground">
+          {orders.length}
+        </span>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        {orders.map((order) => order.customerName).join(", ")}
+      </p>
+    </div>
+  )
+}
+
+function PickupWindowBlock({ dashboard }: { dashboard: Dashboard }) {
+  const pickupOrders = dashboard.closedRounds
+    .filter((round) => round.status === "ready")
+    .flatMap((round) => round.orders)
+  const windows = getNextPickupWindowSelections({
+    slots: dashboard.pickupSlots,
+    orders: pickupOrders,
+    limit: 2,
+  })
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <div>
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          Tidsvinduer
+        </p>
+        <h3 className="mt-1 text-base font-medium">Neste hentetider</h3>
+      </div>
+
+      {windows.length === 0 ? (
+        <p className="mt-3 rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+          Ingen hentetider er lagt ut.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {windows.map((window) => (
+            <article
+              key={window.id}
+              className="rounded-md border border-border"
+            >
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-border px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate leading-tight font-medium">
+                    {window.dateLabel}
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {window.timeLabel}
+                  </p>
+                </div>
+                <div className="text-right font-mono text-xs text-muted-foreground">
+                  <p>{window.orderCount} valgt</p>
+                  <p className="mt-1">{window.bagCount} poser</p>
+                </div>
+              </div>
+              <div className="divide-y divide-border">
+                {window.orders.length === 0 ? (
+                  <p className="px-3 py-2.5 text-sm text-muted-foreground">
+                    Ingen har valgt dette vinduet.
+                  </p>
+                ) : (
+                  window.orders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-sm"
+                    >
+                      <p className="min-w-0 truncate font-medium">
+                        {order.customerName}
+                      </p>
+                      <PickupStatusPill checked={order.collected} />
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -271,8 +425,7 @@ function StartRoundSection({
     >
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
         <SectionTitle
-          kicker="START"
-          title="Ny runde"
+          title="Ny innkjøpsrunde"
           subtitle="Åpne detaljer når du skal starte neste bestilling."
         />
       </div>
@@ -904,7 +1057,7 @@ function BulkCoffeeTotals({ orders }: { orders: Round["orders"] }) {
         <span>
           <span className="block text-lg">Samlet ordre</span>
           <span className="font-mono text-sm text-muted-foreground">
-            {bagCount} poser · {visibleItems.length} kaffe
+            {bagCount} poser · {visibleItems.length} kaffetyper
           </span>
         </span>
         <span className="font-mono text-sm text-muted-foreground">
@@ -1042,8 +1195,10 @@ function ActiveOrderRow({
 
 export function CustomersSection({
   customers,
+  highlightedCustomerId,
 }: {
   customers: Dashboard["customers"]
+  highlightedCustomerId?: string
 }) {
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
@@ -1065,8 +1220,12 @@ export function CustomersSection({
         ) : null}
         {customers.map((customer) => (
           <div
+            id={`customer-${customer.id}`}
             key={customer.id}
-            className="grid gap-2 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_9rem_1fr_auto] sm:items-center"
+            className={getCustomerRowClasses(
+              customer.id,
+              highlightedCustomerId
+            )}
           >
             <div>
               <p className="font-medium">{customer.name}</p>
@@ -1074,10 +1233,18 @@ export function CustomersSection({
                 Registrert {formatDate(customer.createdAt)}
               </p>
             </div>
-            <p className="font-mono text-sm">{customer.phone}</p>
-            <p className="truncate font-mono text-sm text-muted-foreground">
+            <a
+              className="font-mono text-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+              href={getCustomerPhoneHref(customer.phone)}
+            >
+              {customer.phone}
+            </a>
+            <a
+              className="truncate font-mono text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+              href={getCustomerEmailHref(customer.email)}
+            >
               {customer.email}
-            </p>
+            </a>
             <StatusPill
               active={customer.isActive}
               label={customer.isActive ? "Aktiv" : "Inaktiv"}
@@ -1097,56 +1264,82 @@ function RoundsCardList({
   closedRounds: Dashboard["closedRounds"]
 }) {
   const rounds = currentRound ? [currentRound, ...closedRounds] : closedRounds
+  const { latestRound, archivedRounds } = getRoundArchiveSections(rounds)
 
   return (
-    <section
-      id="admin-runder"
-      className="rounded-lg border border-(--ledger-line) bg-card"
-    >
-      <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
+    <section id="admin-runder" className="space-y-3">
+      <div className="flex items-center justify-between gap-4">
         <SectionTitle
-          kicker="02"
-          title="Runder"
-          subtitle="Alle runder som kompakte kort. Åpne detaljer ved behov."
+          title="Innkjøpsrunder"
+          subtitle="Siste runde øverst. Tidligere runder ligger i arkivet."
         />
         <span className="font-mono text-xs text-muted-foreground">
           {rounds.length} runder
         </span>
       </div>
-      <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-3">
-        {rounds.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Ingen runder ennå.</p>
-        ) : null}
-        {rounds.map((round) => (
-          <RoundCard key={round.id} round={round} />
-        ))}
-      </div>
+
+      {latestRound ? (
+        <LatestRoundCard round={latestRound} />
+      ) : (
+        <p className="rounded-lg border border-(--ledger-line) bg-card p-4 text-sm text-muted-foreground">
+          Ingen runder ennå.
+        </p>
+      )}
+
+      {archivedRounds.length > 0 ? (
+        <section className="overflow-hidden rounded-lg border border-(--ledger-line) bg-card">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <h3 className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+              Arkiv
+            </h3>
+            <span className="font-mono text-xs text-muted-foreground">
+              {archivedRounds.length} eldre
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {archivedRounds.map((round) => (
+              <ArchiveRoundLine key={round.id} round={round} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </section>
   )
 }
 
-function RoundCard({ round }: { round: Round }) {
+function LatestRoundCard({ round }: { round: Round }) {
   const summary = summarizeAdminRound(round)
 
   return (
     <Link
       to="/admin/runder/$roundId"
       params={{ roundId: round.id }}
-      className="rounded-lg border border-border bg-muted/20 p-3 transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+      className="block rounded-lg border border-(--ledger-line) bg-card p-4 transition-colors hover:bg-muted/25 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none sm:p-5"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="truncate font-medium">{summary.supplierName}</p>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
+          <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+            Siste runde
+          </p>
+          <h3 className="mt-1 truncate text-xl font-semibold tracking-tight">
+            {summary.supplierName}
+          </h3>
+          <p className="mt-1 font-mono text-sm text-muted-foreground">
             {formatDate(summary.date)}
           </p>
         </div>
-        <StatusPill
-          active={round.status === "open"}
-          label={summary.statusLabel}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusPill
+            active={round.status === "open"}
+            label={summary.statusLabel}
+          />
+          <ArrowRight
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Meta label="Ordre" value={summary.orderCount} />
         <Meta label="Poser" value={summary.bagCount} />
         <Meta
@@ -1162,6 +1355,45 @@ function RoundCard({ round }: { round: Round }) {
   )
 }
 
+function ArchiveRoundLine({ round }: { round: Round }) {
+  const summary = summarizeAdminRound(round)
+
+  return (
+    <Link
+      to="/admin/runder/$roundId"
+      params={{ roundId: round.id }}
+      className="grid gap-3 px-4 py-3 transition-colors hover:bg-muted/25 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+    >
+      <div className="min-w-0">
+        <p className="truncate font-medium">{summary.supplierName}</p>
+        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+          {formatDate(summary.date)}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
+        <span>{summary.orderCount} ordre</span>
+        <span>{summary.bagCount} poser</span>
+        <span>
+          {summary.paidCount}/{summary.orderCount} betalt
+        </span>
+        <span>
+          {summary.collectedCount}/{summary.orderCount} hentet
+        </span>
+      </div>
+      <div className="flex items-center gap-2 sm:justify-self-end">
+        <StatusPill
+          active={round.status === "open"}
+          label={summary.statusLabel}
+        />
+        <ArrowRight
+          className="size-4 text-muted-foreground"
+          aria-hidden="true"
+        />
+      </div>
+    </Link>
+  )
+}
+
 function AdminIndexLinks({ dashboard }: { dashboard: Dashboard }) {
   return (
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1170,21 +1402,34 @@ function AdminIndexLinks({ dashboard }: { dashboard: Dashboard }) {
         className="rounded-lg border border-(--ledger-line) bg-card p-4 hover:bg-muted/30"
       >
         <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-          Arkiv
+          Katalog
         </p>
-        <h2 className="mt-1 text-lg">Kaffekatalog</h2>
+        <h2 className="mt-1 flex items-center justify-between gap-3 text-lg">
+          <span>Kaffe</span>
+          <ArrowRight
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {dashboard.coffees.length} varer. Legg til, rediger og arkiver kaffe.
         </p>
       </Link>
       <Link
         to="/admin/kunder"
+        search={{ customer: undefined }}
         className="rounded-lg border border-(--ledger-line) bg-card p-4 hover:bg-muted/30"
       >
         <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
           Tilgang
         </p>
-        <h2 className="mt-1 text-lg">Kunder</h2>
+        <h2 className="mt-1 flex items-center justify-between gap-3 text-lg">
+          <span>Kunder</span>
+          <ArrowRight
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {dashboard.customers.length} registrerte personer.
         </p>
@@ -1204,18 +1449,30 @@ export function ClosedRoundSummary({
     shippingKr: round.shippingKr,
     orders: round.orders,
   })
+  const grandTotals = calculateRoundGrandTotals({
+    shippingKr: round.shippingKr,
+    orders: round.orders,
+  })
   const isReady = round.status === "ready"
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:grid-cols-4">
+      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm sm:grid-cols-5">
         <Meta label="Status" value={isReady ? "Klar for henting" : "På vei"} />
-        <Meta label="Leverandør" value={round.supplier?.name ?? "Ukjent"} />
+        <div className="sm:col-span-2">
+          <Meta label="Leverandør" value={round.supplier?.name ?? "Ukjent"} />
+        </div>
         <Meta label="Åpnet" value={formatDate(round.openedAt)} />
-        <Meta label="Frakt" value={formatKr(round.shippingKr)} />
-      </div>
+        <Meta label="Lukket" value={formatDate(round.closedAt)} />
 
-      <RoundGrandMetrics shippingKr={round.shippingKr} orders={round.orders} />
+        <div className="h-px bg-border sm:col-span-5" />
+
+        <Meta label="Ordre" value={round.orders.length} />
+        <Meta label="Poser" value={grandTotals.bagCount} />
+        <Meta label="Kaffe" value={formatKr(grandTotals.coffeeSubtotalKr)} />
+        <Meta label="Frakt" value={formatKr(round.shippingKr)} />
+        <Meta label="Totalt" value={formatKr(grandTotals.totalKr)} />
+      </div>
 
       <BulkCoffeeTotals orders={round.orders} />
 
@@ -1225,6 +1482,64 @@ export function ClosedRoundSummary({
         ))}
       </div>
     </div>
+  )
+}
+
+type OptionalAudioWindow = Omit<Window, "AudioContext"> & {
+  AudioContext?: typeof AudioContext
+  webkitAudioContext?: typeof AudioContext
+}
+
+function playPickupScannerTone(checked: boolean) {
+  const tone = getPickupScannerTone(checked)
+  const audioWindow = window as OptionalAudioWindow
+  const AudioContextConstructor =
+    audioWindow.AudioContext || audioWindow.webkitAudioContext
+
+  if (!AudioContextConstructor) return
+
+  try {
+    const context = new AudioContextConstructor()
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    const now = context.currentTime
+    const durationSeconds = tone.durationMs / 1000
+
+    oscillator.type = "square"
+    oscillator.frequency.setValueAtTime(tone.frequencyHz, now)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSeconds)
+
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start(now)
+    oscillator.stop(now + durationSeconds)
+    oscillator.onended = () => void context.close()
+  } catch {
+    // Audio feedback is optional. Keep pickup mode usable if the browser blocks it.
+  }
+}
+
+function CustomerOrderNameLink({
+  customerId,
+  customerName,
+  className,
+}: {
+  customerId?: string
+  customerName: string
+  className?: string
+}) {
+  if (!customerId) return <span className={className}>{customerName}</span>
+
+  return (
+    <Link
+      to="/admin/kunder"
+      search={{ customer: customerId }}
+      className={`${className ?? ""} rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none`}
+    >
+      {customerName}
+    </Link>
   )
 }
 
@@ -1242,6 +1557,7 @@ function ClosedOrderRow({
   const [copied, setCopied] = useState(false)
   const visibleItems = total.items.filter((item) => item.quantity > 0)
   const pickupSummary = getPickupChecklistSummary(total.items, checkedByName)
+  const moneyRows = getOrderMoneyDetailRows(total)
 
   function handlePickupOpenChange(open: boolean) {
     setPickupOpen(open)
@@ -1281,7 +1597,11 @@ function ClosedOrderRow({
         </div>
 
         <div className="min-w-0">
-          <p className="font-semibold">{total.customerName}</p>
+          <CustomerOrderNameLink
+            customerId={total.customerId}
+            customerName={total.customerName}
+            className="font-semibold"
+          />
           <p className="font-mono text-sm text-muted-foreground">
             {pickupSummary.bagCount} poser {formatKr(total.totalKr)}
           </p>
@@ -1293,143 +1613,203 @@ function ClosedOrderRow({
         </div>
 
         <div className="flex items-center gap-2 sm:justify-self-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-              <MoreHorizontal className="size-4" />
-              Handlinger
-              <ChevronDown className="size-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-56">
-              <DropdownMenuItem
-                onClick={async () => {
-                  await updateOrderFlags({
-                    data: {
-                      orderId: total.orderId,
-                      paid: !total.paid,
-                      collected: total.collected,
-                    },
-                  })
-                  await refresh()
-                }}
+          <Dialog>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="sm" />}
               >
-                {total.paid ? "Merk som ikke betalt" : "Merk som betalt"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={async () => {
-                  await updateOrderFlags({
-                    data: {
-                      orderId: total.orderId,
-                      paid: total.paid,
-                      collected: !total.collected,
-                    },
-                  })
-                  await refresh()
-                }}
-              >
-                {total.collected ? "Merk som ikke hentet" : "Merk som hentet"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={copyPaymentLink}>
-                {copied ? "Kopiert" : "Kopier bestillingslenke"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
-            <DialogTrigger render={<Button variant="secondary" size="sm" />}>
-              Hentemodus
-            </DialogTrigger>
-            <DialogContent className="inset-0 top-0 left-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 sm:p-0">
-              <DialogHeader className="mb-0 border-b border-border px-4 py-4 pr-14 sm:px-6">
+                <MoreHorizontal className="size-4" />
+                Handlinger
+                <ChevronDown className="size-3" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-56">
+                <DialogTrigger render={<DropdownMenuItem />}>
+                  Detaljer
+                </DialogTrigger>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    await updateOrderFlags({
+                      data: {
+                        orderId: total.orderId,
+                        paid: !total.paid,
+                        collected: total.collected,
+                      },
+                    })
+                    await refresh()
+                  }}
+                >
+                  {total.paid ? "Merk som ikke betalt" : "Merk som betalt"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    await updateOrderFlags({
+                      data: {
+                        orderId: total.orderId,
+                        paid: total.paid,
+                        collected: !total.collected,
+                      },
+                    })
+                    await refresh()
+                  }}
+                >
+                  {total.collected ? "Merk som ikke hentet" : "Merk som hentet"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={copyPaymentLink}>
+                  {copied ? "Kopiert" : "Kopier bestillingslenke"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DialogContent>
+              <DialogHeader>
                 <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-                  Hentemodus
+                  Ordre
                 </p>
-                <DialogTitle className="mt-1 text-3xl sm:text-4xl">
-                  {total.customerName} henter
-                </DialogTitle>
-                <p className="mt-2 font-mono text-sm text-muted-foreground">
-                  {pickupSummary.checkedCount} av {pickupSummary.productCount} produkter sjekket
-                </p>
+                <DialogTitle>Detaljer</DialogTitle>
               </DialogHeader>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-                {total.pickupSlotLabel ? (
-                  <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-                    Henting: <span className="font-medium">{total.pickupSlotLabel}</span>
+              <div className="space-y-4">
+                <div>
+                  <p className="font-semibold">{total.customerName}</p>
+                  <p className="mt-1 font-mono text-sm text-muted-foreground">
+                    {pickupSummary.bagCount} poser
                   </p>
-                ) : null}
-                <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {visibleItems.map((coffee) => {
-                    const checked = Boolean(checkedByName[coffee.name])
-                    return (
-                      <button
-                        key={coffee.name}
-                        className={`group grid min-h-72 gap-3 rounded-xl border text-left transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none ${checked
-                          ? "border-(--ledger-ink) bg-muted/50"
-                          : "border-border bg-card hover:bg-muted/30"
-                          }`}
-                        type="button"
-                        aria-pressed={checked}
-                        onClick={() =>
-                          setCheckedByName((current) => ({
-                            ...current,
-                            [coffee.name]: !current[coffee.name],
-                          }))
+                </div>
+                <dl className="divide-y divide-border rounded-lg border border-border bg-muted/20 font-mono text-sm">
+                  {moneyRows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between gap-4 px-3 py-2.5"
+                    >
+                      <dt className="text-muted-foreground">{row.label}</dt>
+                      <dd
+                        className={
+                          row.emphasis
+                            ? "font-semibold text-foreground"
+                            : "text-foreground"
                         }
                       >
-                        <span className="relative overflow-hidden rounded-t-xl bg-muted p-1">
-                          {coffee.imageUrl ? (
-                            <img
-                              className="aspect-square w-full object-contain"
-                              src={coffee.imageUrl}
-                              alt=""
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span className="block aspect-square w-full" />
-                          )}
-                          <span className="absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm">
-                            {checked ? <Check className="size-5" /> : <Circle className="size-5" />}
-                          </span>
-                        </span>
-                        <span className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 p-3">
-                          <span className="min-w-0 text-lg font-semibold leading-tight">
-                            {coffee.name}
-                          </span>
-                          <span className="text-right">
-                            <span className="block font-serif text-5xl leading-none">
-                              {coffee.quantity}
-                            </span>
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="border-t border-border bg-card px-4 py-3 sm:px-6">
-                <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-mono text-sm text-muted-foreground">
-                    {pickupSummary.bagCount} poser totalt
+                        {row.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                {total.pickupSlotLabel ? (
+                  <p className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                    Henting:{" "}
+                    <span className="font-medium text-foreground">
+                      {total.pickupSlotLabel}
+                    </span>
                   </p>
-                  <Button
-                    className="h-12 w-full text-base sm:w-auto sm:min-w-64"
-                    type="button"
-                    disabled={total.collected || !pickupSummary.allChecked}
-                    onClick={markAsCollected}
-                  >
-                    {total.collected ? "Allerede hentet" : "Merk som hentet"}
-                  </Button>
-                </div>
+                ) : null}
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+          {shouldOfferPickupMode(total.collected) ? (
+            <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
+              <DialogTrigger render={<Button variant="secondary" size="sm" />}>
+                Hentemodus
+              </DialogTrigger>
+              <DialogContent className="inset-0 top-0 left-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 sm:p-0">
+                <DialogHeader className="mb-0 border-b border-border px-4 py-4 pr-14 sm:px-6">
+                  <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+                    Hentemodus
+                  </p>
+                  <DialogTitle className="mt-1 text-3xl sm:text-4xl">
+                    {total.customerName} henter
+                  </DialogTitle>
+                  <p className="mt-2 font-mono text-sm text-muted-foreground">
+                    {pickupSummary.checkedCount} av {pickupSummary.productCount}{" "}
+                    produkter sjekket
+                  </p>
+                </DialogHeader>
 
-      <div className="mt-3 grid gap-2 border-t border-border pt-3 font-mono text-sm sm:grid-cols-3">
-        <p>Kaffe: {formatKr(total.coffeeSubtotalKr)}</p>
-        <p>Frakt: {formatKr(total.shippingShareKr)}</p>
-        <p className="font-semibold">Totalt: {formatKr(total.totalKr)}</p>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                  {total.pickupSlotLabel ? (
+                    <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                      Henting:{" "}
+                      <span className="font-medium">
+                        {total.pickupSlotLabel}
+                      </span>
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+                    {visibleItems.map((coffee) => {
+                      const checked = Boolean(checkedByName[coffee.name])
+                      return (
+                        <button
+                          key={coffee.name}
+                          className={`group grid min-h-72 gap-3 rounded-xl border text-left transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none ${
+                            checked
+                              ? "border-(--ledger-ink) bg-muted/50"
+                              : "border-border bg-card hover:bg-muted/30"
+                          }`}
+                          type="button"
+                          aria-pressed={checked}
+                          onClick={() =>
+                            setCheckedByName((current) => {
+                              const nextChecked = !current[coffee.name]
+                              playPickupScannerTone(nextChecked)
+
+                              return {
+                                ...current,
+                                [coffee.name]: nextChecked,
+                              }
+                            })
+                          }
+                        >
+                          <span className="relative overflow-hidden rounded-t-xl bg-muted p-1">
+                            {coffee.imageUrl ? (
+                              <img
+                                className="aspect-square w-full object-contain"
+                                src={coffee.imageUrl}
+                                alt=""
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className="block aspect-square w-full" />
+                            )}
+                            <span className="absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm">
+                              {checked ? (
+                                <Check className="size-5" />
+                              ) : (
+                                <Circle className="size-5" />
+                              )}
+                            </span>
+                          </span>
+                          <span className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 p-3">
+                            <span className="min-w-0 text-lg leading-tight font-semibold">
+                              {coffee.name}
+                            </span>
+                            <span className="text-right">
+                              <span className="block font-serif text-5xl leading-none">
+                                {coffee.quantity}
+                              </span>
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t border-border bg-card px-4 pt-3 pb-5 sm:px-6 sm:pb-6">
+                  <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="font-mono text-sm text-muted-foreground">
+                      {pickupSummary.bagCount} poser totalt
+                    </p>
+                    <Button
+                      className="h-12 w-full text-base sm:w-auto sm:min-w-64"
+                      type="button"
+                      disabled={total.collected || !pickupSummary.allChecked}
+                      onClick={markAsCollected}
+                    >
+                      {total.collected ? "Allerede hentet" : "Merk som hentet"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </div>
       </div>
     </article>
   )
@@ -1440,7 +1820,7 @@ function SectionTitle({
   title,
   subtitle,
 }: {
-  kicker: string
+  kicker?: string
   title: string
   subtitle: string
 }) {
