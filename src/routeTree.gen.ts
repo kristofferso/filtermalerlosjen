@@ -16,6 +16,7 @@ import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orde
 import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
 import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
 import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
+import { Route as AdminRunderRoundIdHentemodusRouteImport } from './routes/admin.runder.$roundId.hentemodus'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -52,6 +53,12 @@ const AdminRunderRoundIdRoute = AdminRunderRoundIdRouteImport.update({
   path: '/runder/$roundId',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminRunderRoundIdHentemodusRoute =
+  AdminRunderRoundIdHentemodusRouteImport.update({
+    id: '/hentemodus',
+    path: '/hentemodus',
+    getParentRoute: () => AdminRunderRoundIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,7 +67,8 @@ export interface FileRoutesByFullPath {
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
-  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
+  '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -69,7 +77,8 @@ export interface FileRoutesByTo {
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
-  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
+  '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -79,7 +88,8 @@ export interface FileRoutesById {
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
-  '/admin/runder/$roundId': typeof AdminRunderRoundIdRoute
+  '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
+  '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +101,7 @@ export interface FileRouteTypes {
     | '/admin/kunder'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
+    | '/admin/runder/$roundId/hentemodus'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +111,7 @@ export interface FileRouteTypes {
     | '/admin/kunder'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
+    | '/admin/runder/$roundId/hentemodus'
   id:
     | '__root__'
     | '/'
@@ -109,6 +121,7 @@ export interface FileRouteTypes {
     | '/admin/kunder'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
+    | '/admin/runder/$roundId/hentemodus'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -169,19 +182,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRunderRoundIdRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/runder/$roundId/hentemodus': {
+      id: '/admin/runder/$roundId/hentemodus'
+      path: '/hentemodus'
+      fullPath: '/admin/runder/$roundId/hentemodus'
+      preLoaderRoute: typeof AdminRunderRoundIdHentemodusRouteImport
+      parentRoute: typeof AdminRunderRoundIdRoute
+    }
   }
 }
+
+interface AdminRunderRoundIdRouteChildren {
+  AdminRunderRoundIdHentemodusRoute: typeof AdminRunderRoundIdHentemodusRoute
+}
+
+const AdminRunderRoundIdRouteChildren: AdminRunderRoundIdRouteChildren = {
+  AdminRunderRoundIdHentemodusRoute: AdminRunderRoundIdHentemodusRoute,
+}
+
+const AdminRunderRoundIdRouteWithChildren =
+  AdminRunderRoundIdRoute._addFileChildren(AdminRunderRoundIdRouteChildren)
 
 interface AdminRouteChildren {
   AdminKaffeRoute: typeof AdminKaffeRoute
   AdminKunderRoute: typeof AdminKunderRoute
-  AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRoute
+  AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRouteWithChildren
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminKaffeRoute: AdminKaffeRoute,
   AdminKunderRoute: AdminKunderRoute,
-  AdminRunderRoundIdRoute: AdminRunderRoundIdRoute,
+  AdminRunderRoundIdRoute: AdminRunderRoundIdRouteWithChildren,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)

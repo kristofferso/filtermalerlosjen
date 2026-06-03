@@ -48,10 +48,6 @@ import { getNextPickupWindowSelections } from "@/lib/pickup-slots"
 import {
   getOrderMoneyDetailRows,
   getOrderStatusPillClasses,
-  getPickupChecklistInitialState,
-  getPickupChecklistSummary,
-  getPickupScannerTone,
-  shouldOfferPickupMode,
 } from "@/lib/admin-order-row-ui"
 import {
   calculateCoffeeTotals,
@@ -261,9 +257,8 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
                 {item.label}
               </p>
               <p
-                className={`mt-1 text-sm font-medium ${
-                  item.tone === "attention" ? "text-destructive" : ""
-                }`}
+                className={`mt-1 text-sm font-medium ${item.tone === "attention" ? "text-destructive" : ""
+                  }`}
               >
                 {item.value}
               </p>
@@ -373,17 +368,32 @@ function PickupWindowBlock({ dashboard }: { dashboard: Dashboard }) {
                     Ingen har valgt dette vinduet.
                   </p>
                 ) : (
-                  window.orders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-sm"
-                    >
-                      <p className="min-w-0 truncate font-medium">
-                        {order.customerName}
-                      </p>
-                      <PickupStatusPill checked={order.collected} />
-                    </div>
-                  ))
+                  window.orders.map((order) =>
+                    order.collected ? (
+                      <div
+                        key={order.id}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-sm"
+                      >
+                        <p className="min-w-0 truncate font-medium">
+                          {order.customerName}
+                        </p>
+                        <PickupStatusPill checked={order.collected} />
+                      </div>
+                    ) : (
+                      <Link
+                        key={order.id}
+                        to="/admin/runder/$roundId/hentemodus"
+                        params={{ roundId: order.roundId }}
+                        search={{ order: order.id }}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-muted/30 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+                      >
+                        <p className="min-w-0 truncate font-medium">
+                          {order.customerName}
+                        </p>
+                        <PickupStatusPill checked={order.collected} />
+                      </Link>
+                    )
+                  )
                 )}
               </div>
             </article>
@@ -1271,7 +1281,7 @@ function RoundsCardList({
       <div className="flex items-center justify-between gap-4">
         <SectionTitle
           title="Innkjøpsrunder"
-          subtitle="Siste runde øverst. Tidligere runder ligger i arkivet."
+          subtitle="Siste runde øverst"
         />
         <span className="font-mono text-xs text-muted-foreground">
           {rounds.length} runder
@@ -1485,42 +1495,6 @@ export function ClosedRoundSummary({
   )
 }
 
-type OptionalAudioWindow = Omit<Window, "AudioContext"> & {
-  AudioContext?: typeof AudioContext
-  webkitAudioContext?: typeof AudioContext
-}
-
-function playPickupScannerTone(checked: boolean) {
-  const tone = getPickupScannerTone(checked)
-  const audioWindow = window as OptionalAudioWindow
-  const AudioContextConstructor =
-    audioWindow.AudioContext || audioWindow.webkitAudioContext
-
-  if (!AudioContextConstructor) return
-
-  try {
-    const context = new AudioContextConstructor()
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-    const now = context.currentTime
-    const durationSeconds = tone.durationMs / 1000
-
-    oscillator.type = "square"
-    oscillator.frequency.setValueAtTime(tone.frequencyHz, now)
-    gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.01)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSeconds)
-
-    oscillator.connect(gain)
-    gain.connect(context.destination)
-    oscillator.start(now)
-    oscillator.stop(now + durationSeconds)
-    oscillator.onended = () => void context.close()
-  } catch {
-    // Audio feedback is optional. Keep pickup mode usable if the browser blocks it.
-  }
-}
-
 function CustomerOrderNameLink({
   customerId,
   customerName,
@@ -1550,42 +1524,18 @@ function ClosedOrderRow({
   total: ReturnType<typeof calculateRoundTotals>[number]
   refresh: () => Promise<void>
 }) {
-  const [pickupOpen, setPickupOpen] = useState(false)
-  const [checkedByName, setCheckedByName] = useState(() =>
-    getPickupChecklistInitialState(total.items, total.collected)
-  )
   const [copied, setCopied] = useState(false)
-  const visibleItems = total.items.filter((item) => item.quantity > 0)
-  const pickupSummary = getPickupChecklistSummary(total.items, checkedByName)
+  const bagCount = total.items.reduce(
+    (sum, item) => sum + Math.max(0, item.quantity),
+    0
+  )
   const moneyRows = getOrderMoneyDetailRows(total)
-
-  function handlePickupOpenChange(open: boolean) {
-    setPickupOpen(open)
-    if (open) {
-      setCheckedByName(
-        getPickupChecklistInitialState(total.items, total.collected)
-      )
-    }
-  }
 
   async function copyPaymentLink() {
     const link = `${window.location.origin}/bestilling/${total.orderId}`
     await navigator.clipboard.writeText(link)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
-  }
-
-  async function markAsCollected() {
-    if (total.collected || !pickupSummary.allChecked) return
-    await updateOrderFlags({
-      data: {
-        orderId: total.orderId,
-        paid: total.paid,
-        collected: true,
-      },
-    })
-    await refresh()
-    setPickupOpen(false)
   }
 
   return (
@@ -1603,7 +1553,7 @@ function ClosedOrderRow({
             className="font-semibold"
           />
           <p className="font-mono text-sm text-muted-foreground">
-            {pickupSummary.bagCount} poser {formatKr(total.totalKr)}
+            {bagCount} poser {formatKr(total.totalKr)}
           </p>
           {total.pickupSlotLabel ? (
             <p className="mt-1 text-sm text-muted-foreground">
@@ -1670,7 +1620,7 @@ function ClosedOrderRow({
                 <div>
                   <p className="font-semibold">{total.customerName}</p>
                   <p className="mt-1 font-mono text-sm text-muted-foreground">
-                    {pickupSummary.bagCount} poser
+                    {bagCount} poser
                   </p>
                 </div>
                 <dl className="divide-y divide-border rounded-lg border border-border bg-muted/20 font-mono text-sm">
@@ -1703,112 +1653,6 @@ function ClosedOrderRow({
               </div>
             </DialogContent>
           </Dialog>
-          {shouldOfferPickupMode(total.collected) ? (
-            <Dialog open={pickupOpen} onOpenChange={handlePickupOpenChange}>
-              <DialogTrigger render={<Button variant="secondary" size="sm" />}>
-                Hentemodus
-              </DialogTrigger>
-              <DialogContent className="inset-0 top-0 left-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 sm:p-0">
-                <DialogHeader className="mb-0 border-b border-border px-4 py-4 pr-14 sm:px-6">
-                  <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-                    Hentemodus
-                  </p>
-                  <DialogTitle className="mt-1 text-3xl sm:text-4xl">
-                    {total.customerName} henter
-                  </DialogTitle>
-                  <p className="mt-2 font-mono text-sm text-muted-foreground">
-                    {pickupSummary.checkedCount} av {pickupSummary.productCount}{" "}
-                    produkter sjekket
-                  </p>
-                </DialogHeader>
-
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-                  {total.pickupSlotLabel ? (
-                    <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-                      Henting:{" "}
-                      <span className="font-medium">
-                        {total.pickupSlotLabel}
-                      </span>
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-                    {visibleItems.map((coffee) => {
-                      const checked = Boolean(checkedByName[coffee.name])
-                      return (
-                        <button
-                          key={coffee.name}
-                          className={`group grid min-h-72 gap-3 rounded-xl border text-left transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none ${
-                            checked
-                              ? "border-(--ledger-ink) bg-muted/50"
-                              : "border-border bg-card hover:bg-muted/30"
-                          }`}
-                          type="button"
-                          aria-pressed={checked}
-                          onClick={() =>
-                            setCheckedByName((current) => {
-                              const nextChecked = !current[coffee.name]
-                              playPickupScannerTone(nextChecked)
-
-                              return {
-                                ...current,
-                                [coffee.name]: nextChecked,
-                              }
-                            })
-                          }
-                        >
-                          <span className="relative overflow-hidden rounded-t-xl bg-muted p-1">
-                            {coffee.imageUrl ? (
-                              <img
-                                className="aspect-square w-full object-contain"
-                                src={coffee.imageUrl}
-                                alt=""
-                                loading="lazy"
-                              />
-                            ) : (
-                              <span className="block aspect-square w-full" />
-                            )}
-                            <span className="absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm">
-                              {checked ? (
-                                <Check className="size-5" />
-                              ) : (
-                                <Circle className="size-5" />
-                              )}
-                            </span>
-                          </span>
-                          <span className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 p-3">
-                            <span className="min-w-0 text-lg leading-tight font-semibold">
-                              {coffee.name}
-                            </span>
-                            <span className="text-right">
-                              <span className="block font-serif text-5xl leading-none">
-                                {coffee.quantity}
-                              </span>
-                            </span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="border-t border-border bg-card px-4 pt-3 pb-5 sm:px-6 sm:pb-6">
-                  <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="font-mono text-sm text-muted-foreground">
-                      {pickupSummary.bagCount} poser totalt
-                    </p>
-                    <Button
-                      className="h-12 w-full text-base sm:w-auto sm:min-w-64"
-                      type="button"
-                      disabled={total.collected || !pickupSummary.allChecked}
-                      onClick={markAsCollected}
-                    >
-                      {total.collected ? "Allerede hentet" : "Merk som hentet"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          ) : null}
         </div>
       </div>
     </article>

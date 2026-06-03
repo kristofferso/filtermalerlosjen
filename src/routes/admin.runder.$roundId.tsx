@@ -1,4 +1,10 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router"
+import {
+  Link,
+  Outlet,
+  createFileRoute,
+  useLocation,
+  useRouter,
+} from "@tanstack/react-router"
 import {
   AdminHeader,
   AdminPasswordForm,
@@ -6,6 +12,7 @@ import {
   EditRoundForm,
   OpenRoundSection,
 } from "./admin"
+import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,8 +21,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { getAdminRoundDetail, markRoundReadyForPickup } from "@/server/coffee"
 
+type AdminRoundDetailData = Extract<
+  Awaited<ReturnType<typeof getAdminRoundDetail>>,
+  { unlocked: true }
+>
+type AdminRoundDetailRound = NonNullable<AdminRoundDetailData["round"]>
 
 export const Route = createFileRoute("/admin/runder/$roundId")({
   loader: ({ params }) =>
@@ -23,9 +41,53 @@ export const Route = createFileRoute("/admin/runder/$roundId")({
   component: AdminRoundDetailPage,
 })
 
+function PickupModeTopAction({ round }: { round: AdminRoundDetailRound }) {
+  const uncollectedOrders = round.orders
+    .filter((order) => !order.collected)
+    .sort((left, right) =>
+      left.customerName.localeCompare(right.customerName, "nb-NO")
+    )
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="secondary" type="button" />}
+        disabled={uncollectedOrders.length === 0}
+      >
+        Hentemodus
+        <ChevronDown className="size-3" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-56">
+        {uncollectedOrders.length === 0 ? (
+          <DropdownMenuItem disabled>Alle er hentet</DropdownMenuItem>
+        ) : (
+          uncollectedOrders.map((order) => (
+            <DropdownMenuItem
+              key={order.id}
+              render={
+                <Link
+                  to="/admin/runder/$roundId/hentemodus"
+                  params={{ roundId: round.id }}
+                  search={{ order: order.id }}
+                />
+              }
+            >
+              {order.customerName}
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function AdminRoundDetailPage() {
   const data = Route.useLoaderData()
+  const params = Route.useParams()
+  const location = useLocation()
   const router = useRouter()
+
+  if (location.pathname !== `/admin/runder/${params.roundId}`) return <Outlet />
 
   return (
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
@@ -80,6 +142,9 @@ function AdminRoundDetailPage() {
                       />
                     </DialogContent>
                   </Dialog>
+                  {data.round.status === "ready" ? (
+                    <PickupModeTopAction round={data.round} />
+                  ) : null}
                   <Button
                     type="button"
                     disabled={data.round.status === "ready"}
