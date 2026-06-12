@@ -15,6 +15,7 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router"
+import { AdminVoteTally } from "@/components/admin-vote-tally"
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
 import {
@@ -235,7 +236,10 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
   )
 
   return (
-    <aside className="lg:sticky lg:top-5">
+    <aside className="space-y-5 lg:sticky lg:top-5">
+      {dashboard.voteTally.length > 0 ? (
+        <AdminVoteTally tally={dashboard.voteTally} />
+      ) : null}
       <section className="rounded-lg border border-(--ledger-line) bg-card p-4">
         <div className="border-b border-border pb-3">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
@@ -257,8 +261,9 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
                 {item.label}
               </p>
               <p
-                className={`mt-1 text-sm font-medium ${item.tone === "attention" ? "text-destructive" : ""
-                  }`}
+                className={`mt-1 text-sm font-medium ${
+                  item.tone === "attention" ? "text-destructive" : ""
+                }`}
               >
                 {item.value}
               </p>
@@ -276,7 +281,10 @@ function StatusRail({ dashboard }: { dashboard: Dashboard }) {
             <PendingCustomerCard label="Ikke betalt" orders={unpaidOrders} />
           ) : null}
           {uncollectedOrders.length > 0 ? (
-            <PendingCustomerCard label="Ikke hentet" orders={uncollectedOrders} />
+            <PendingCustomerCard
+              label="Ikke hentet"
+              orders={uncollectedOrders}
+            />
           ) : null}
         </div>
 
@@ -1279,10 +1287,7 @@ function RoundsCardList({
   return (
     <section id="admin-runder" className="space-y-3">
       <div className="flex items-center justify-between gap-4">
-        <SectionTitle
-          title="Innkjøpsrunder"
-          subtitle="Siste runde øverst"
-        />
+        <SectionTitle title="Innkjøpsrunder" subtitle="Siste runde øverst" />
         <span className="font-mono text-xs text-muted-foreground">
           {rounds.length} runder
         </span>
