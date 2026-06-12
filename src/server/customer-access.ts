@@ -1,17 +1,13 @@
 import { createServerFn } from "@tanstack/react-start"
 
-import { getSelectedCustomerId, isCustomerUnlocked } from "./auth.server"
+import { getCurrentUser } from "./session"
 
 export const getCustomerRouteAccess = createServerFn({ method: "GET" }).handler(
   async () => {
-    const unlocked = await isCustomerUnlocked()
-    if (!unlocked) {
-      return { unlocked: false as const, selectedCustomerId: null }
-    }
-
+    const user = await getCurrentUser()
     return {
-      unlocked: true as const,
-      selectedCustomerId: await getSelectedCustomerId(),
+      authenticated: Boolean(user),
+      customerId: user?.id ?? null,
     }
   }
 )

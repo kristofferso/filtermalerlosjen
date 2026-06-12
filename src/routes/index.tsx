@@ -11,18 +11,14 @@ import {
 } from "@/lib/order-totals"
 import { addCoffeeVat, calculateCoffeeVat } from "@/lib/vat"
 import { getCustomerRouteAccess } from "@/server/customer-access"
-import {
-  getCustomerHomeData,
-  logoutCustomer,
-  submitOrder,
-} from "@/server/coffee"
+import { logout } from "@/server/login.functions"
+import { getCustomerHomeData, submitOrder } from "@/server/coffee"
 
 export const Route = createFileRoute("/")({
   loader: async ({ location }) => {
     const access = await getCustomerRouteAccess()
     const loginRedirect = getCustomerLoginRedirect({
-      unlocked: access.unlocked,
-      hasSelectedCustomer: Boolean(access.selectedCustomerId),
+      authenticated: access.authenticated,
       currentPath: location.href,
     })
     if (loginRedirect) throw redirect(loginRedirect)
@@ -45,7 +41,7 @@ function CustomerPage() {
           title={BRAND_NAME}
           selectedCustomer={data.selectedCustomer}
           onLogout={async () => {
-            await logoutCustomer()
+            await logout()
             await router.invalidate()
           }}
         />

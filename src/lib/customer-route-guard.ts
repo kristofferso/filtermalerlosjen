@@ -4,15 +4,13 @@ export type CustomerLoginRedirect = {
 }
 
 export function getCustomerLoginRedirect({
-  unlocked,
-  hasSelectedCustomer,
+  authenticated,
   currentPath,
 }: {
-  unlocked: boolean
-  hasSelectedCustomer: boolean
+  authenticated: boolean
   currentPath: string
 }): CustomerLoginRedirect | null {
-  if (unlocked && hasSelectedCustomer) return null
+  if (authenticated) return null
 
   return {
     to: "/login",

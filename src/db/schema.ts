@@ -18,6 +18,8 @@ export const roundStatus = pgEnum("round_status", [
   "ready",
 ])
 
+export const userRole = pgEnum("user_role", ["member", "admin"])
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -109,14 +111,36 @@ export const customers = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
-    phone: text("phone").notNull(),
+    phone: text("phone").notNull().default(""),
     email: text("email").notNull(),
+    role: userRole("role").notNull().default("member"),
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,
   },
   (table) => ({
     nameIdx: index("customers_name_idx").on(table.name),
     emailIdx: index("customers_email_idx").on(table.email),
+    emailUnique: uniqueIndex("customers_email_unique_idx")
+      .on(table.email)
+      .where(sql`${table.email} <> ''`),
+  })
+)
+
+export const loginCodes = pgTable(
+  "login_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    emailIdx: index("login_codes_email_idx").on(table.email),
   })
 )
 

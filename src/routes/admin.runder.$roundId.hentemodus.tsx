@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
 import { ChevronDown, X } from "lucide-react"
-import { AdminPasswordForm } from "./admin"
+import { AdminAccessNotice } from "./admin"
 import { AdminPickupMode } from "@/components/admin-pickup-mode"
 import { Button } from "@/components/ui/button"
 import {
@@ -61,7 +61,7 @@ function AdminPickupModePage() {
     <main className="min-h-svh text-foreground">
       {!data.unlocked ? (
         <div className="p-4 sm:p-6 lg:p-8">
-          <AdminPasswordForm onUnlocked={() => router.invalidate()} />
+          <AdminAccessNotice />
         </div>
       ) : null}
       {data.unlocked && !data.round ? (

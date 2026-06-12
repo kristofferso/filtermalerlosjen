@@ -8,9 +8,8 @@ import {
   verifySessionToken,
 } from "@/lib/auth"
 
-export const CUSTOMER_COOKIE = "kk_customer_session"
-export const ADMIN_COOKIE = "kk_admin_session"
-export const SELECTED_CUSTOMER_COOKIE = "kk_selected_customer"
+export const GATE_COOKIE = "kk_gate"
+export const SESSION_COOKIE = "kk_session"
 
 const WRONG_PASSWORD_ERROR =
   "Det er ikke det hemmelige ordet! Er du med i losjen??"
@@ -23,15 +22,15 @@ const sessionCookieOptions = {
   maxAge: 60 * 60 * 24 * 180,
 }
 
-export async function unlockCustomerSession(password: string) {
+export async function unlockGate(password: string) {
   if (password !== requireEnv("CUSTOMER_PASSWORD")) {
     return { ok: false, error: WRONG_PASSWORD_ERROR } as const
   }
 
   setCookie(
-    CUSTOMER_COOKIE,
+    GATE_COOKIE,
     await createSessionToken({
-      purpose: "customer",
+      purpose: "gate",
       secret: requireEnv("SESSION_SECRET"),
     }),
     sessionCookieOptions
@@ -40,34 +39,17 @@ export async function unlockCustomerSession(password: string) {
   return { ok: true } as const
 }
 
-export async function unlockAdminSession(password: string) {
-  if (password !== requireEnv("ADMIN_PASSWORD")) {
-    return { ok: false, error: WRONG_PASSWORD_ERROR } as const
-  }
-
-  setCookie(
-    ADMIN_COOKIE,
-    await createSessionToken({
-      purpose: "admin",
-      secret: requireEnv("SESSION_SECRET"),
-    }),
-    sessionCookieOptions
-  )
-
-  return { ok: true } as const
-}
-
-export async function isCustomerUnlocked() {
+export async function isGateUnlocked() {
   return verifySessionToken({
-    token: getCookie(CUSTOMER_COOKIE),
-    purpose: "customer",
+    token: getCookie(GATE_COOKIE),
+    purpose: "gate",
     secret: requireEnv("SESSION_SECRET"),
   })
 }
 
-export async function selectCustomerSession(customerId: string) {
+export async function setAuthenticatedSession(customerId: string) {
   setCookie(
-    SELECTED_CUSTOMER_COOKIE,
+    SESSION_COOKIE,
     await createCustomerToken({
       customerId,
       secret: requireEnv("SESSION_SECRET"),
@@ -76,27 +58,13 @@ export async function selectCustomerSession(customerId: string) {
   )
 }
 
-export function clearSelectedCustomerSession() {
-  deleteCookie(SELECTED_CUSTOMER_COOKIE, { path: "/" })
-}
-
-export async function getSelectedCustomerId() {
+export async function getAuthenticatedCustomerId() {
   return verifyCustomerToken({
-    token: getCookie(SELECTED_CUSTOMER_COOKIE),
+    token: getCookie(SESSION_COOKIE),
     secret: requireEnv("SESSION_SECRET"),
   })
 }
 
-export async function isAdminUnlocked() {
-  return verifySessionToken({
-    token: getCookie(ADMIN_COOKIE),
-    purpose: "admin",
-    secret: requireEnv("SESSION_SECRET"),
-  })
-}
-
-export async function assertAdmin() {
-  if (!(await isAdminUnlocked())) {
-    throw new Error("Admin access required")
-  }
+export function clearAuthenticatedSession() {
+  deleteCookie(SESSION_COOKIE, { path: "/" })
 }
