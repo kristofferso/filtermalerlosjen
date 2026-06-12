@@ -57,6 +57,13 @@
       "when": 1780407558789,
       "tag": "0007_awesome_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781266757261,
+      "tag": "0008_noisy_arclight",
+      "breakpoints": true
     }
   ]
 }

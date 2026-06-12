@@ -20,6 +20,7 @@ import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 import { calculateRoundTotals } from "@/lib/order-totals"
 import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
 import { fetchPickupSlotsFromIcsCalendar } from "@/lib/pickup-slots"
+import { buildSupplierBoard } from "@/lib/supplier-votes"
 import {
   coffees,
   customers,
@@ -27,6 +28,7 @@ import {
   orders,
   roundCoffees,
   rounds,
+  supplierVotes,
   suppliers,
 } from "@/db/schema"
 
@@ -89,6 +91,7 @@ const submitOrderSchema = z.object({
     })
   ),
 })
+const castSupplierVoteSchema = z.object({ supplierId: uuidSchema })
 const adminRoundDetailSchema = z.object({ roundId: uuidSchema })
 const archiveCoffeeSchema = z.object({ id: uuidSchema })
 const deleteOrderSchema = z.object({ orderId: uuidSchema })
@@ -231,6 +234,38 @@ async function getOrderSummaries(roundIds: Array<string>) {
   return Array.from(byOrder.values())
 }
 
+async function getSupplierBoardData() {
+  const [supplierRows, coffeeRows, voteRows] = await Promise.all([
+    db.select().from(suppliers).orderBy(suppliers.name),
+    db
+      .select({
+        supplierId: coffees.supplierId,
+        imageUrl: coffees.imageUrl,
+        priceKr: coffees.priceKr,
+        isActive: coffees.isActive,
+        isDeleted: coffees.isDeleted,
+      })
+      .from(coffees)
+      .where(eq(coffees.isDeleted, false)),
+    db
+      .select({
+        supplierId: supplierVotes.supplierId,
+        customerId: supplierVotes.customerId,
+        customerName: customers.name,
+        createdAt: supplierVotes.createdAt,
+      })
+      .from(supplierVotes)
+      .innerJoin(customers, eq(customers.id, supplierVotes.customerId))
+      .orderBy(supplierVotes.createdAt),
+  ])
+
+  return buildSupplierBoard({
+    suppliers: supplierRows,
+    coffees: coffeeRows,
+    votes: voteRows,
+  })
+}
+
 function getNotificationBaseUrl() {
   return process.env.APP_URL?.trim() || "http://localhost:3000"
 }
@@ -342,16 +377,31 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
       getActiveCustomers(),
       getSelectedCustomer(),
     ])
-    if (!openRound)
+    if (!openRound) {
+      const [supplierBoard, statusOrder] = await Promise.all([
+        getSupplierBoardData(),
+        selectedCustomer
+          ? getLatestCustomerStatusOrder(selectedCustomer.id)
+          : null,
+      ])
+      const myVoteSupplierId = selectedCustomer
+        ? (supplierBoard.find((entry) =>
+            entry.voters.some(
+              (voter) => voter.customerId === selectedCustomer.id
+            )
+          )?.supplierId ?? null)
+        : null
+
       return {
         unlocked: true as const,
         openRound: null,
         customers: customerRows,
         selectedCustomer,
-        statusOrder: selectedCustomer
-          ? await getLatestCustomerStatusOrder(selectedCustomer.id)
-          : null,
+        statusOrder,
+        supplierBoard,
+        myVoteSupplierId,
       }
+    }
 
     const supplierRows = await db
       .select()
@@ -406,6 +456,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
       openRound,
       closedRoundRows,
       pickupSlots,
+      voteTally,
     ] = await Promise.all([
       db.select().from(suppliers).orderBy(suppliers.name),
       db
@@ -421,6 +472,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
         .where(inArray(rounds.status, ["closed", "ready"]))
         .orderBy(desc(rounds.closedAt)),
       getConfiguredPickupSlots(),
+      getSupplierBoardData(),
     ])
 
     const roundIds = [
@@ -453,6 +505,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
       coffees: coffeeRows,
       customers: customerRows,
       pickupSlots,
+      voteTally: voteTally.filter((entry) => entry.voteCount > 0),
       openRound: openRound
         ? {
             ...openRound,
@@ -594,6 +647,9 @@ export const openRound = createServerFn({ method: "POST" })
       }))
     )
 
+    // Demand has been answered — clear the supplier voting board.
+    await db.delete(supplierVotes)
+
     return round
   })
 
@@ -719,6 +775,52 @@ export const selectCustomer = createServerFn({ method: "POST" })
 export const logoutCustomer = createServerFn({ method: "POST" }).handler(
   async () => {
     await clearSelectedCustomerSession()
+    return { ok: true }
+  }
+)
+
+export const castSupplierVote = createServerFn({ method: "POST" })
+  .inputValidator((input) => castSupplierVoteSchema.parse(input))
+  .handler(async ({ data }) => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const selectedCustomer = await getSelectedCustomer()
+    if (!selectedCustomer) throw new Error("Velg hvem som stemmer")
+
+    const supplierRows = await db
+      .select({ id: suppliers.id })
+      .from(suppliers)
+      .where(eq(suppliers.id, data.supplierId))
+      .limit(1)
+    if (!supplierRows.at(0)) throw new Error("Leverandøren finnes ikke")
+
+    await db
+      .insert(supplierVotes)
+      .values({
+        supplierId: data.supplierId,
+        customerId: selectedCustomer.id,
+      })
+      .onConflictDoUpdate({
+        target: supplierVotes.customerId,
+        set: { supplierId: data.supplierId, createdAt: new Date() },
+      })
+
+    return { ok: true }
+  })
+
+export const withdrawSupplierVote = createServerFn({ method: "POST" }).handler(
+  async () => {
+    if (!(await isCustomerUnlocked()))
+      throw new Error("Customer access required")
+
+    const selectedCustomerId = await getSelectedCustomerId()
+    if (!selectedCustomerId) throw new Error("Velg hvem som stemmer")
+
+    await db
+      .delete(supplierVotes)
+      .where(eq(supplierVotes.customerId, selectedCustomerId))
+
     return { ok: true }
   }
 )
