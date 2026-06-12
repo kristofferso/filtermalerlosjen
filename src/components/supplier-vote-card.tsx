@@ -10,11 +10,13 @@ export function SupplierVoteCard({
   entry,
   isMyVote,
   disabled,
+  loading,
   onVote,
 }: {
   entry: SupplierBoardEntry
   isMyVote: boolean
   disabled: boolean
+  loading: boolean
   onVote: () => void
 }) {
   const minKr = addCoffeeVat(entry.priceRange.minKr)
@@ -60,6 +62,7 @@ export function SupplierVoteCard({
           size="sm"
           variant={isMyVote ? "secondary" : "default"}
           disabled={disabled}
+          loading={loading}
           onClick={onVote}
         >
           {isMyVote ? "Din stemme ✓" : "Stem"}

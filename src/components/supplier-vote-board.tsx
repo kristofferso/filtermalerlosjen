@@ -59,7 +59,7 @@ export function SupplierVoteBoard({
           KLAR FOR MER KAFFE?
         </p>
         <h2 className="mt-2 font-serif text-3xl font-normal tracking-tight">
-          Stem på neste leverandør
+          Stem på neste runde
         </h2>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
           Si fra hvilken leverandør du ønsker neste runde fra. Du har én stemme
@@ -76,6 +76,7 @@ export function SupplierVoteBoard({
             entry={entry}
             isMyVote={myVoteSupplierId === entry.supplierId}
             disabled={pendingSupplierId !== null}
+            loading={pendingSupplierId === entry.supplierId}
             onVote={() => handleVote(entry.supplierId)}
           />
         ))}
