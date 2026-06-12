@@ -6,6 +6,7 @@ import type {
   orders,
   roundCoffees,
   rounds,
+  supplierVotes,
   suppliers,
 } from "./schema"
 
@@ -16,3 +17,4 @@ export type Round = InferSelectModel<typeof rounds>
 export type RoundCoffee = InferSelectModel<typeof roundCoffees>
 export type Order = InferSelectModel<typeof orders>
 export type OrderItem = InferSelectModel<typeof orderItems>
+export type SupplierVote = InferSelectModel<typeof supplierVotes>

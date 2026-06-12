@@ -170,6 +170,28 @@ export const orders = pgTable(
   })
 )
 
+export const supplierVotes = pgTable(
+  "supplier_votes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    uniqueCustomer: uniqueIndex("supplier_votes_customer_idx").on(
+      table.customerId
+    ),
+    supplierIdx: index("supplier_votes_supplier_idx").on(table.supplierId),
+  })
+)
+
 export const orderItems = pgTable(
   "order_items",
   {
@@ -194,6 +216,7 @@ export const orderItems = pgTable(
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   coffees: many(coffees),
   rounds: many(rounds),
+  votes: many(supplierVotes),
 }))
 
 export const coffeesRelations = relations(coffees, ({ one, many }) => ({
@@ -230,6 +253,18 @@ export const roundCoffeesRelations = relations(
 
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
+  votes: many(supplierVotes),
+}))
+
+export const supplierVotesRelations = relations(supplierVotes, ({ one }) => ({
+  supplier: one(suppliers, {
+    fields: [supplierVotes.supplierId],
+    references: [suppliers.id],
+  }),
+  customer: one(customers, {
+    fields: [supplierVotes.customerId],
+    references: [customers.id],
+  }),
 }))
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
