@@ -7,23 +7,23 @@ import {
   verifyLoginCode,
 } from "@/server/login.functions"
 
-type Step = "email" | "code" | "signup"
+type Step = "login" | "register" | "code"
 
 export function CustomerLoginCard({
   onComplete,
 }: {
   onComplete: () => Promise<void>
 }) {
-  const [step, setStep] = useState<Step>("email")
+  const [step, setStep] = useState<Step>("login")
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
-  const [phone, setPhone] = useState("")
+  const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function resetTo(next: Step) {
+  function goTo(next: Step) {
     setError("")
     setNotice("")
     setStep(next)
@@ -39,9 +39,9 @@ export function CustomerLoginCard({
       if (result.ok) {
         setNotice(`Vi sendte en kode til ${email}.`)
         setStep("code")
-      } else if ("notFound" in result && result.notFound) {
-        setNotice("Vi fant ingen konto. Bli med i losjen under.")
-        setStep("signup")
+      } else if ("notFound" in result) {
+        setError("Vi fant ingen konto med denne e-posten. Registrer deg under.")
+        setStep("register")
       } else {
         setError(result.error)
       }
@@ -50,15 +50,13 @@ export function CustomerLoginCard({
     }
   }
 
-  async function handleSignup(event: React.FormEvent<HTMLFormElement>) {
+  async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
     setNotice("")
     setIsSubmitting(true)
     try {
-      const result = await signup({
-        data: { name, email, phone: phone || undefined },
-      })
+      const result = await signup({ data: { password, name, email } })
       if (result.ok) {
         setNotice(`Velkommen! Vi sendte en kode til ${email}.`)
         setStep("code")
@@ -88,7 +86,7 @@ export function CustomerLoginCard({
 
   return (
     <section className="w-full max-w-md rounded-xl border border-(--ledger-line) bg-card p-5 shadow-2xl shadow-black/25 sm:p-6">
-      {step === "email" ? (
+      {step === "login" ? (
         <form onSubmit={handleRequestCode}>
           <h1 className="font-serif text-4xl font-normal tracking-tight">
             Logg inn
@@ -113,15 +111,34 @@ export function CustomerLoginCard({
           >
             {isSubmitting ? "Sender kode..." : "Send kode"}
           </Button>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Ikke medlem enda?{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => goTo("register")}
+              disabled={isSubmitting}
+            >
+              Bli med i losjen
+            </button>
+          </p>
         </form>
       ) : null}
 
-      {step === "signup" ? (
-        <form onSubmit={handleSignup}>
+      {step === "register" ? (
+        <form onSubmit={handleRegister}>
           <h1 className="font-serif text-4xl font-normal tracking-tight">
             Bli med i losjen
           </h1>
           <div className="mt-6 grid gap-3 text-left">
+            <TextField
+              label="Hemmelig ord"
+              value={password}
+              onChange={setPassword}
+              type="password"
+              autoComplete="off"
+              disabled={isSubmitting}
+            />
             <TextField
               label="Navn"
               value={name}
@@ -137,17 +154,6 @@ export function CustomerLoginCard({
               type="email"
               disabled={isSubmitting}
             />
-            <TextField
-              label="Telefonnummer (valgfritt)"
-              value={phone}
-              onChange={setPhone}
-              autoComplete="tel-national"
-              inputMode="numeric"
-              pattern="[0-9]{8}"
-              maxLength={8}
-              required={false}
-              disabled={isSubmitting}
-            />
           </div>
           <Button
             className="mt-5 w-full"
@@ -155,16 +161,19 @@ export function CustomerLoginCard({
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Blir med..." : "Bli med"}
+            {isSubmitting ? "Registrerer..." : "Registrer"}
           </Button>
-          <button
-            type="button"
-            className="mt-4 w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
-            onClick={() => resetTo("email")}
-            disabled={isSubmitting}
-          >
-            Har du allerede konto? Logg inn
-          </button>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Har du allerede konto?{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => goTo("login")}
+              disabled={isSubmitting}
+            >
+              Logg inn
+            </button>
+          </p>
         </form>
       ) : null}
 
@@ -180,9 +189,7 @@ export function CustomerLoginCard({
             className="mt-6"
             label="Engangskode"
             value={code}
-            onChange={(value) =>
-              setCode(value.replace(/\D/g, "").slice(0, 6))
-            }
+            onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
             inputMode="numeric"
             pattern="[0-9]{6}"
             maxLength={6}
@@ -200,7 +207,7 @@ export function CustomerLoginCard({
           <button
             type="button"
             className="mt-4 w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
-            onClick={() => resetTo("email")}
+            onClick={() => goTo("login")}
             disabled={isSubmitting}
           >
             Bruk en annen e-post

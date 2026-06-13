@@ -71,20 +71,30 @@ export function buildLoginCodeEmail({
   code: string
   customerName: string
 }): NotificationEmail {
-  const title = "Innloggingskode"
-  const body = `Koden din er ${code}. Den er gyldig i 10 minutter. Skriv den inn for å logge inn. Hvis du ikke ba om dette kan du se bort fra denne e-posten.`
+  // Formatting tuned for iOS/macOS one-time-code autofill: the code appears in
+  // the subject and as a standalone token right after the keyword "code", and
+  // it is the only digit run in the message.
+  const html = `<!doctype html>
+<html lang="no">
+  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+      <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
+      <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">Innloggingskode</h1>
+      <p style="margin:0 0 8px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
+      <p style="margin:0 0 12px;line-height:1.6;color:#000000;">Din innloggingskode (one-time code) er:</p>
+      <p style="margin:0 0 16px;font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:0.18em;color:#000000;">${escapeHtml(code)}</p>
+      <p style="margin:0;line-height:1.6;color:#000000;">Koden er gyldig i ti minutter. Hvis du ikke ba om dette kan du se bort fra denne e-posten.</p>
+    </div>
+  </body>
+</html>`
+
+  const text = `${BRAND_NAME}\n\nInnloggingskode\n\nHei ${customerName},\n\nDin innloggingskode (one-time code) er: ${code}\n\nKoden er gyldig i ti minutter.`
 
   return {
     to,
-    subject: `Innloggingskode: ${code}`,
-    html: renderHtml({
-      customerName,
-      title,
-      body,
-      orderUrl: null,
-      actionLabel: null,
-    }),
-    text: renderText({ customerName, title, body, orderUrl: null }),
+    subject: `${code} er innloggingskoden din`,
+    html,
+    text,
   }
 }
 

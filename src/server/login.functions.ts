@@ -4,9 +4,7 @@ import { z } from "zod"
 import {
   clearAuthenticatedSession,
   getAuthenticatedCustomerId,
-  isGateUnlocked,
   setAuthenticatedSession,
-  unlockGate,
 } from "./auth.server"
 import { buildLoginCodeEmail, sendNotificationEmail } from "./notifications"
 import { db } from "@/db/client"
@@ -21,26 +19,20 @@ import {
   normalizeEmail,
   requireEnv,
 } from "@/lib/auth"
-import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 
-const passwordSchema = z.object({ password: z.string().min(1) })
 const emailSchema = z.object({ email: z.string().trim().email().max(120) })
 const verifySchema = z.object({
   email: z.string().trim().email().max(120),
   code: z.string().trim().regex(/^\d{6}$/, "Koden må være 6 siffer"),
 })
 const signupSchema = z.object({
+  password: z.string().min(1),
   name: z.string().trim().min(1).max(80),
   email: z.string().trim().email().max(120),
-  phone: z
-    .string()
-    .trim()
-    .regex(EIGHT_DIGIT_PHONE_PATTERN, "Telefonnummer må være 8 siffer")
-    .optional()
-    .or(z.literal("")),
 })
 
-const GATE_REQUIRED_ERROR = "Du må oppgi det hemmelige ordet først"
+const WRONG_PASSWORD_ERROR =
+  "Det er ikke det hemmelige ordet! Er du med i losjen??"
 
 async function findActiveCustomerByEmail(email: string) {
   const rows = await db
@@ -86,24 +78,14 @@ async function issueLoginCode(email: string, customerName: string) {
 
 export const getLoginStatus = createServerFn({ method: "GET" }).handler(
   async () => {
-    const [gateUnlocked, customerId] = await Promise.all([
-      isGateUnlocked(),
-      getAuthenticatedCustomerId(),
-    ])
-    return { gateUnlocked, authenticated: Boolean(customerId) }
+    const customerId = await getAuthenticatedCustomerId()
+    return { authenticated: Boolean(customerId) }
   }
 )
-
-export const unlockGateFn = createServerFn({ method: "POST" })
-  .inputValidator((input) => passwordSchema.parse(input))
-  .handler(async ({ data }) => unlockGate(data.password))
 
 export const requestLoginCode = createServerFn({ method: "POST" })
   .inputValidator((input) => emailSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isGateUnlocked()))
-      return { ok: false as const, error: GATE_REQUIRED_ERROR }
-
     const email = normalizeEmail(data.email)
     const customer = await findActiveCustomerByEmail(email)
     if (!customer) return { ok: false as const, notFound: true as const }
@@ -114,9 +96,6 @@ export const requestLoginCode = createServerFn({ method: "POST" })
 export const verifyLoginCode = createServerFn({ method: "POST" })
   .inputValidator((input) => verifySchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isGateUnlocked()))
-      return { ok: false as const, error: GATE_REQUIRED_ERROR }
-
     const email = normalizeEmail(data.email)
     const rows = await db
       .select()
@@ -159,8 +138,9 @@ export const verifyLoginCode = createServerFn({ method: "POST" })
 export const signup = createServerFn({ method: "POST" })
   .inputValidator((input) => signupSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isGateUnlocked()))
-      return { ok: false as const, error: GATE_REQUIRED_ERROR }
+    if (data.password !== requireEnv("CUSTOMER_PASSWORD")) {
+      return { ok: false as const, error: WRONG_PASSWORD_ERROR }
+    }
 
     const email = normalizeEmail(data.email)
     const existing = await findActiveCustomerByEmail(email)
@@ -171,11 +151,7 @@ export const signup = createServerFn({ method: "POST" })
       }
     }
 
-    await db.insert(customers).values({
-      name: data.name,
-      email,
-      phone: data.phone ?? "",
-    })
+    await db.insert(customers).values({ name: data.name, email })
 
     return issueLoginCode(email, data.name)
   })

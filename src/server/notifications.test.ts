@@ -40,9 +40,10 @@ describe("notification templates", () => {
     })
 
     expect(email.to).toBe("kunde@example.com")
-    expect(email.subject).toBe("Innloggingskode: 123456")
+    expect(email.subject).toBe("123456 er innloggingskoden din")
     expect(email.html).toContain("123456")
     expect(email.html).toContain("Filtermalerlosjen")
+    expect(email.html).toContain("one-time code")
     expect(email.html).not.toContain("<a ")
     expect(email.text).toContain("123456")
     expect(email.text).not.toContain("Se bestilling")

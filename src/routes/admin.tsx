@@ -141,12 +141,13 @@ export function AdminAccessNotice() {
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         TILGANG
       </p>
-      <h2 className="mt-2 text-xl">Admin krever innlogging</h2>
+      <h2 className="mt-2 text-xl">Ingen admintilgang</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Logg inn med en adminkonto for å se denne siden.
+        Denne siden krever en adminkonto. Logg inn med en konto som har
+        admintilgang, eller be en admin om tilgang.
       </p>
-      <Button className="mt-5" render={<Link to="/login" search={{ redirect: "/admin" }} />}>
-        Til innlogging
+      <Button className="mt-5" variant="outline" render={<Link to="/" />}>
+        Til forsiden
       </Button>
     </div>
   )
