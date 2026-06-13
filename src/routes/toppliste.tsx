@@ -4,7 +4,6 @@ import { BRAND_NAME } from "@/components/brand"
 import { LeaderboardBadges } from "@/components/leaderboard-badges"
 import { LeaderboardCharts } from "@/components/leaderboard-charts"
 import { LeaderboardPodium } from "@/components/leaderboard-podium"
-import { LeaderboardRanking } from "@/components/leaderboard-ranking"
 import { LogisticsFooter } from "@/components/logistics-footer"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { getCustomerRouteAccess } from "@/server/customer-access"
@@ -46,8 +45,10 @@ function TopplistePage() {
           }}
         />
 
-        <LeaderboardPodium podium={leaderboard.podium} />
-        <LeaderboardRanking ranking={leaderboard.ranking} />
+        <LeaderboardPodium
+          podium={leaderboard.podium}
+          rest={leaderboard.ranking.slice(3)}
+        />
         <LeaderboardBadges badges={leaderboard.badges} />
         <LeaderboardCharts charts={leaderboard.charts} />
 

@@ -1,4 +1,4 @@
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts"
 import type {
   CoffeePopularityPoint,
   GramsPerRoundPoint,
@@ -14,6 +14,17 @@ import { formatGrams } from "@/lib/coffee-units"
 const chartConfig = {
   grams: { label: "Gram", color: "var(--chart-1)" },
 } satisfies ChartConfig
+
+// Shades of the identity colour: one hue, descending opacity per bar.
+const SHADE_OPACITIES = [1, 0.82, 0.66, 0.52, 0.42]
+
+function shadeOpacity(index: number) {
+  return SHADE_OPACITIES[index % SHADE_OPACITIES.length]
+}
+
+function truncateLabel(value: string, max: number) {
+  return value.length > max ? `${value.slice(0, max)}…` : value
+}
 
 function gramsFormatter(value: unknown) {
   return formatGrams(Number(value) || 0)
@@ -55,14 +66,17 @@ export function LeaderboardCharts({
                 axisLine={false}
                 tickMargin={8}
                 interval={0}
-                tickFormatter={(value: string) =>
-                  value.length > 14 ? `${value.slice(0, 14)}…` : value
-                }
+                tick={{ fontSize: 11 }}
+                tickFormatter={(value: string) => truncateLabel(value, 10)}
               />
               <ChartTooltip
                 content={<ChartTooltipContent formatter={gramsFormatter} />}
               />
-              <Bar dataKey="grams" fill="var(--color-grams)" radius={4} />
+              <Bar dataKey="grams" fill="var(--color-grams)" radius={4}>
+                {charts.gramsPerRound.map((point, index) => (
+                  <Cell key={point.roundId} fillOpacity={shadeOpacity(index)} />
+                ))}
+              </Bar>
             </BarChart>
           </ChartContainer>
         </div>
@@ -91,14 +105,17 @@ export function LeaderboardCharts({
                 tickLine={false}
                 axisLine={false}
                 width={96}
-                tickFormatter={(value: string) =>
-                  value.length > 14 ? `${value.slice(0, 14)}…` : value
-                }
+                tick={{ fontSize: 11 }}
+                tickFormatter={(value: string) => truncateLabel(value, 12)}
               />
               <ChartTooltip
                 content={<ChartTooltipContent formatter={gramsFormatter} />}
               />
-              <Bar dataKey="grams" fill="var(--color-grams)" radius={4} />
+              <Bar dataKey="grams" fill="var(--color-grams)" radius={4}>
+                {charts.coffeePopularity.map((point, index) => (
+                  <Cell key={point.name} fillOpacity={shadeOpacity(index)} />
+                ))}
+              </Bar>
             </BarChart>
           </ChartContainer>
         </div>

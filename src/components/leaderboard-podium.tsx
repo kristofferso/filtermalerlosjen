@@ -60,7 +60,48 @@ function PodiumColumn({ entry }: { entry: RankingEntry }) {
   )
 }
 
-export function LeaderboardPodium({ podium }: { podium: Array<RankingEntry> }) {
+function RankRow({ entry }: { entry: RankingEntry }) {
+  return (
+    <li className="flex items-center justify-between gap-3 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="w-6 shrink-0 text-right font-mono text-sm text-muted-foreground tabular-nums">
+          {entry.rank}
+        </span>
+        <span
+          className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-card font-mono text-xs font-semibold text-muted-foreground"
+          aria-hidden="true"
+        >
+          {getInitials(entry.customerName)}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{entry.customerName}</p>
+          <p className="font-mono text-xs text-muted-foreground">
+            {entry.roundsParticipated}{" "}
+            {entry.roundsParticipated === 1 ? "runde" : "runder"} ·{" "}
+            {entry.distinctCoffeeTypes}{" "}
+            {entry.distinctCoffeeTypes === 1 ? "sort" : "sorter"}
+          </p>
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="font-mono text-sm font-semibold">
+          {formatGrams(entry.totalGrams)}
+        </p>
+        <p className="font-mono text-sm text-muted-foreground">
+          {formatKr(entry.totalKr)}
+        </p>
+      </div>
+    </li>
+  )
+}
+
+export function LeaderboardPodium({
+  podium,
+  rest,
+}: {
+  podium: Array<RankingEntry>
+  rest: Array<RankingEntry>
+}) {
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card p-4 sm:p-6">
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
@@ -91,6 +132,14 @@ export function LeaderboardPodium({ podium }: { podium: Array<RankingEntry> }) {
           )}
         </div>
       )}
+
+      {rest.length > 0 ? (
+        <ol className="mt-4 divide-y divide-border border-t border-border">
+          {rest.map((entry) => (
+            <RankRow key={entry.memberKey} entry={entry} />
+          ))}
+        </ol>
+      ) : null}
     </section>
   )
 }

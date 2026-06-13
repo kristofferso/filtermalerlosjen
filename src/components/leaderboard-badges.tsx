@@ -1,24 +1,62 @@
+import {
+  Heart,
+  Layers,
+  Medal,
+  Package,
+  Sparkles,
+  Sunrise,
+  TrendingUp,
+  Wallet,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import type { Badge, BadgeId } from "@/lib/leaderboard"
-import { getInitials } from "@/lib/initials"
+import { AvatarStack } from "@/components/avatar-stack"
 
-const BADGE_EMOJI: Record<BadgeId, string> = {
-  climber: "📈",
-  diverse: "🌍",
-  loyal: "❤️",
-  spender: "💸",
-  regular: "🎖️",
-  "biggest-order": "📦",
-  "early-bird": "🐦",
-  newcomer: "✨",
+const BADGE_VISUAL: Record<
+  BadgeId,
+  { icon: LucideIcon; ring: string; tint: string }
+> = {
+  climber: {
+    icon: TrendingUp,
+    ring: "ring-emerald-400/40",
+    tint: "text-emerald-300",
+  },
+  diverse: { icon: Layers, ring: "ring-sky-400/40", tint: "text-sky-300" },
+  loyal: { icon: Heart, ring: "ring-rose-400/40", tint: "text-rose-300" },
+  spender: { icon: Wallet, ring: "ring-amber-400/40", tint: "text-amber-300" },
+  regular: { icon: Medal, ring: "ring-violet-400/40", tint: "text-violet-300" },
+  "biggest-order": {
+    icon: Package,
+    ring: "ring-orange-400/40",
+    tint: "text-orange-300",
+  },
+  "early-bird": {
+    icon: Sunrise,
+    ring: "ring-yellow-400/40",
+    tint: "text-yellow-300",
+  },
+  newcomer: {
+    icon: Sparkles,
+    ring: "ring-fuchsia-400/40",
+    tint: "text-fuchsia-300",
+  },
 }
 
 function BadgeCard({ badge }: { badge: Badge }) {
-  const emoji = BADGE_EMOJI[badge.id]
+  const visual = BADGE_VISUAL[badge.id]
+  const Icon = visual.icon
+  const names = badge.winners.map((winner) => winner.customerName)
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-(--ledger-line) bg-card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start gap-3">
+        <span
+          className={`grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-b from-muted to-card ring-1 ${visual.ring}`}
+          aria-hidden="true"
+        >
+          <Icon className={`size-4 ${visual.tint}`} />
+        </span>
+        <div className="min-w-0">
           <p className="font-mono text-xs tracking-[0.14em] text-muted-foreground uppercase">
             {badge.title}
           </p>
@@ -26,22 +64,14 @@ function BadgeCard({ badge }: { badge: Badge }) {
             {badge.description}
           </p>
         </div>
-        <span className="text-2xl leading-none" aria-hidden="true">
-          {emoji}
-        </span>
       </div>
 
-      {badge.available && badge.winners.length > 0 ? (
-        <div className="mt-auto flex items-center justify-between gap-3">
+      {badge.available && names.length > 0 ? (
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-muted/40 font-mono text-xs font-semibold"
-              aria-hidden="true"
-            >
-              {getInitials(badge.winners[0].customerName)}
-            </span>
-            <p className="truncate text-sm font-semibold">
-              {badge.winners.map((winner) => winner.customerName).join(", ")}
+            <AvatarStack names={names} max={4} />
+            <p className="min-w-0 truncate text-sm font-semibold">
+              {names.length === 1 ? names[0] : `${names.length} personer`}
             </p>
           </div>
           {badge.stat ? (
