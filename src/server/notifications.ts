@@ -62,6 +62,42 @@ export function buildOrderUrl(orderId: string, baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/bestilling/${orderId}`
 }
 
+export function buildLoginCodeEmail({
+  to,
+  code,
+  customerName,
+}: {
+  to: string
+  code: string
+  customerName: string
+}): NotificationEmail {
+  // Formatting tuned for iOS/macOS one-time-code autofill: the code appears in
+  // the subject and as a standalone token right after the keyword "code", and
+  // it is the only digit run in the message.
+  const html = `<!doctype html>
+<html lang="no">
+  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+      <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
+      <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">Innloggingskode</h1>
+      <p style="margin:0 0 8px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
+      <p style="margin:0 0 12px;line-height:1.6;color:#000000;">Din innloggingskode (one-time code) er:</p>
+      <p style="margin:0 0 16px;font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:0.18em;color:#000000;">${escapeHtml(code)}</p>
+      <p style="margin:0;line-height:1.6;color:#000000;">Koden er gyldig i ti minutter. Hvis du ikke ba om dette kan du se bort fra denne e-posten.</p>
+    </div>
+  </body>
+</html>`
+
+  const text = `${BRAND_NAME}\n\nInnloggingskode\n\nHei ${customerName},\n\nDin innloggingskode (one-time code) er: ${code}\n\nKoden er gyldig i ti minutter.`
+
+  return {
+    to,
+    subject: `${code} er innloggingskoden din`,
+    html,
+    text,
+  }
+}
+
 export function buildNotificationEmail(
   input: NotificationInput
 ): NotificationEmail {
@@ -215,9 +251,17 @@ function renderHtml({
   customerName: string
   title: string
   body: string
-  orderUrl: string
-  actionLabel: string
+  orderUrl: string | null
+  actionLabel: string | null
 }) {
+  const action =
+    orderUrl && actionLabel
+      ? `
+      <p style="margin:0;">
+        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;font-weight:700;">${escapeHtml(actionLabel)}</a>
+      </p>`
+      : ""
+
   return `<!doctype html>
 <html lang="no">
   <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
@@ -225,10 +269,7 @@ function renderHtml({
       <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
       <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">${escapeHtml(title)}</h1>
       <p style="margin:0 0 16px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
-      <p style="margin:0 0 24px;line-height:1.6;color:#000000;">${escapeHtml(body)}</p>
-      <p style="margin:0;">
-        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;font-weight:700;">${escapeHtml(actionLabel)}</a>
-      </p>
+      <p style="margin:0 0 24px;line-height:1.6;color:#000000;">${escapeHtml(body)}</p>${action}
     </div>
   </body>
 </html>`
@@ -243,9 +284,10 @@ function renderText({
   customerName: string
   title: string
   body: string
-  orderUrl: string
+  orderUrl: string | null
 }) {
-  return `${BRAND_NAME}\n\n${title}\n\nHei ${customerName},\n\n${body}\n\nSe bestilling: ${orderUrl}`
+  const action = orderUrl ? `\n\nSe bestilling: ${orderUrl}` : ""
+  return `${BRAND_NAME}\n\n${title}\n\nHei ${customerName},\n\n${body}${action}`
 }
 
 function escapeHtml(value: string) {

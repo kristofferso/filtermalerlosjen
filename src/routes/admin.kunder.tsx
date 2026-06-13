@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
-import { AdminHeader, AdminPasswordForm, CustomersSection } from "./admin"
+import { AdminAccessNotice, AdminHeader, CustomersSection } from "./admin"
 import { getAdminDashboard } from "@/server/coffee"
 
 export const Route = createFileRoute("/admin/kunder")({
@@ -19,13 +19,12 @@ function AdminCustomersPage() {
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl space-y-5">
         <AdminHeader />
-        {!data.unlocked ? (
-          <AdminPasswordForm onUnlocked={() => router.invalidate()} />
-        ) : null}
+        {!data.unlocked ? <AdminAccessNotice /> : null}
         {data.unlocked ? (
           <CustomersSection
             customers={data.customers}
             highlightedCustomerId={search.customer}
+            refresh={() => router.invalidate()}
           />
         ) : null}
       </div>

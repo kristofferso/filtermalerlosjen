@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import {
   applyNotificationRecipientWhitelist,
+  buildLoginCodeEmail,
   buildNotificationEmail,
   buildOrderUrl,
   buildRoundNotificationEmails,
@@ -29,6 +30,23 @@ describe("notification templates", () => {
     expect(email.html).not.toContain("#211b16")
     expect(email.text).toContain("Kari")
     expect(email.text).toContain("https://kaffe.example/bestilling/order-1")
+  })
+
+  test("builds a login code email without an action link", () => {
+    const email = buildLoginCodeEmail({
+      to: "kunde@example.com",
+      code: "123456",
+      customerName: "Kari",
+    })
+
+    expect(email.to).toBe("kunde@example.com")
+    expect(email.subject).toBe("123456 er innloggingskoden din")
+    expect(email.html).toContain("123456")
+    expect(email.html).toContain("Filtermalerlosjen")
+    expect(email.html).toContain("one-time code")
+    expect(email.html).not.toContain("<a ")
+    expect(email.text).toContain("123456")
+    expect(email.text).not.toContain("Se bestilling")
   })
 
   test("filters empty recipient emails from round notifications", () => {

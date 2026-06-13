@@ -7,14 +7,14 @@ import { OrderForm } from "@/components/order-form"
 import { SupplierVoteBoard } from "@/components/supplier-vote-board"
 import { getCustomerLoginRedirect } from "@/lib/customer-route-guard"
 import { getCustomerRouteAccess } from "@/server/customer-access"
-import { getCustomerHomeData, logoutCustomer } from "@/server/coffee"
+import { logout } from "@/server/login.functions"
+import { getCustomerHomeData } from "@/server/coffee"
 
 export const Route = createFileRoute("/")({
   loader: async ({ location }) => {
     const access = await getCustomerRouteAccess()
     const loginRedirect = getCustomerLoginRedirect({
-      unlocked: access.unlocked,
-      hasSelectedCustomer: Boolean(access.selectedCustomerId),
+      authenticated: access.authenticated,
       currentPath: location.href,
     })
     if (loginRedirect) throw redirect(loginRedirect)
@@ -37,7 +37,7 @@ function CustomerPage() {
           title={BRAND_NAME}
           selectedCustomer={data.selectedCustomer}
           onLogout={async () => {
-            await logoutCustomer()
+            await logout()
             await router.invalidate()
           }}
         />

@@ -1,166 +1,225 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { registerCustomer, selectCustomer } from "@/server/coffee"
+  requestLoginCode,
+  signup,
+  verifyLoginCode,
+} from "@/server/login.functions"
 
-export type CustomerLoginOption = {
-  id: string
-  name: string
-}
+type Step = "login" | "register" | "code"
 
 export function CustomerLoginCard({
-  customers,
   onComplete,
 }: {
-  customers: Array<CustomerLoginOption>
   onComplete: () => Promise<void>
 }) {
-  const [selectedCustomerId, setSelectedCustomerId] = useState("")
-  const [name, setName] = useState("")
-  const [phone, setPhone] = useState("")
+  const [step, setStep] = useState<Step>("login")
   const [email, setEmail] = useState("")
+  const [name, setName] = useState("")
+  const [password, setPassword] = useState("")
+  const [code, setCode] = useState("")
   const [error, setError] = useState("")
-  const [isSelecting, setIsSelecting] = useState(false)
-  const [isRegistering, setIsRegistering] = useState(false)
-  const pendingActionRef = useRef<"select" | "register" | null>(null)
+  const [notice, setNotice] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  async function handleSelect(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selectedCustomerId || pendingActionRef.current) return
-    pendingActionRef.current = "select"
+  function goTo(next: Step) {
     setError("")
-    setIsSelecting(true)
+    setNotice("")
+    setStep(next)
+  }
+
+  async function handleRequestCode(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    setNotice("")
+    setIsSubmitting(true)
     try {
-      await selectCustomer({ data: { customerId: selectedCustomerId } })
-      await onComplete()
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Kunne ikke velge person"
-      )
+      const result = await requestLoginCode({ data: { email } })
+      if (result.ok) {
+        setNotice(`Vi sendte en kode til ${email}.`)
+        setStep("code")
+      } else if ("notFound" in result) {
+        setError("Vi fant ingen konto med denne e-posten. Registrer deg under.")
+        setStep("register")
+      } else {
+        setError(result.error)
+      }
     } finally {
-      pendingActionRef.current = null
-      setIsSelecting(false)
+      setIsSubmitting(false)
     }
   }
 
   async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pendingActionRef.current) return
-    pendingActionRef.current = "register"
     setError("")
-    setIsRegistering(true)
+    setNotice("")
+    setIsSubmitting(true)
     try {
-      await registerCustomer({ data: { name, phone, email } })
-      await onComplete()
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Kunne ikke registrere person"
-      )
-      pendingActionRef.current = null
-      setIsRegistering(false)
+      const result = await signup({ data: { password, name, email } })
+      if (result.ok) {
+        setNotice(`Velkommen! Vi sendte en kode til ${email}.`)
+        setStep("code")
+      } else {
+        setError(result.error)
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleVerify(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    setIsSubmitting(true)
+    try {
+      const result = await verifyLoginCode({ data: { email, code } })
+      if (result.ok) {
+        await onComplete()
+      } else {
+        setError(result.error)
+      }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <section className="w-full max-w-md rounded-xl border border-(--ledger-line) bg-card p-5 shadow-2xl shadow-black/25 sm:p-6">
-      <form onSubmit={handleSelect}>
-        <h1 className="font-serif text-4xl font-normal tracking-tight">
-          Identifiser deg
-        </h1>
-
-        <label className="mt-6 block space-y-2">
-          <span className="text-sm font-medium">Ditt medlemsnavn</span>
-          <select
-            className="h-10 w-full rounded-md border border-input bg-background py-0 pr-10 pl-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            value={selectedCustomerId}
-            onChange={(event) => setSelectedCustomerId(event.target.value)}
-            disabled={isSelecting || isRegistering}
+      {step === "login" ? (
+        <form onSubmit={handleRequestCode}>
+          <h1 className="font-serif text-4xl font-normal tracking-tight">
+            Logg inn
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Skriv inn e-posten din, så sender vi deg en engangskode.
+          </p>
+          <TextField
+            className="mt-6"
+            label="E-post"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            type="email"
+            disabled={isSubmitting}
+          />
+          <Button
+            className="mt-5 w-full"
+            size="lg"
+            type="submit"
+            disabled={isSubmitting || !email}
           >
-            <option value="" disabled>
-              (⌐ ͡■ ͜ʖ ͡■)
-            </option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          className="mt-5 w-full"
-          size="lg"
-          type="submit"
-          disabled={!selectedCustomerId || isSelecting || isRegistering}
-        >
-          {isSelecting ? "Trer inn..." : "Tre inn"}
-        </Button>
-      </form>
+            {isSubmitting ? "Sender kode..." : "Send kode"}
+          </Button>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Ikke medlem enda?{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => goTo("register")}
+              disabled={isSubmitting}
+            >
+              Bli med i losjen
+            </button>
+          </p>
+        </form>
+      ) : null}
 
-      <div className="my-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <span className="h-px bg-border" />
-        <span className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-          eller
-        </span>
-        <span className="h-px bg-border" />
-      </div>
-
-      <div className="text-center text-sm text-muted-foreground">
-        Ikke medlem enda?{" "}
-        <Dialog>
-          <DialogTrigger className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none">
+      {step === "register" ? (
+        <form onSubmit={handleRegister}>
+          <h1 className="font-serif text-4xl font-normal tracking-tight">
             Bli med i losjen
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Bli med i losjen</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleRegister}>
-              <div className="grid gap-3 text-left">
-                <TextField
-                  label="Navn"
-                  value={name}
-                  onChange={setName}
-                  autoComplete="name"
-                  disabled={isSelecting || isRegistering}
-                />
-                <TextField
-                  label="Telefonnummer"
-                  value={phone}
-                  onChange={setPhone}
-                  autoComplete="tel-national"
-                  inputMode="numeric"
-                  pattern="[0-9]{8}"
-                  maxLength={8}
-                  disabled={isSelecting || isRegistering}
-                />
-                <TextField
-                  label="E-post"
-                  value={email}
-                  onChange={setEmail}
-                  autoComplete="email"
-                  type="email"
-                  disabled={isSelecting || isRegistering}
-                />
-              </div>
-              <Button
-                className="mt-5 w-full"
-                type="submit"
-                disabled={isSelecting || isRegistering}
-              >
-                {isRegistering ? "Blir med..." : "Bli med"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </h1>
+          <div className="mt-6 grid gap-3 text-left">
+            <TextField
+              label="Hemmelig ord"
+              value={password}
+              onChange={setPassword}
+              type="password"
+              autoComplete="off"
+              disabled={isSubmitting}
+            />
+            <TextField
+              label="Navn"
+              value={name}
+              onChange={setName}
+              autoComplete="name"
+              disabled={isSubmitting}
+            />
+            <TextField
+              label="E-post"
+              value={email}
+              onChange={setEmail}
+              autoComplete="email"
+              type="email"
+              disabled={isSubmitting}
+            />
+          </div>
+          <Button
+            className="mt-5 w-full"
+            size="lg"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Registrerer..." : "Registrer"}
+          </Button>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Har du allerede konto?{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              onClick={() => goTo("login")}
+              disabled={isSubmitting}
+            >
+              Logg inn
+            </button>
+          </p>
+        </form>
+      ) : null}
 
+      {step === "code" ? (
+        <form onSubmit={handleVerify}>
+          <h1 className="font-serif text-4xl font-normal tracking-tight">
+            Skriv inn kode
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Vi sendte en 6-sifret kode til {email}.
+          </p>
+          <TextField
+            className="mt-6"
+            label="Engangskode"
+            value={code}
+            onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            autoComplete="one-time-code"
+            disabled={isSubmitting}
+          />
+          <Button
+            className="mt-5 w-full"
+            size="lg"
+            type="submit"
+            disabled={isSubmitting || code.length !== 6}
+          >
+            {isSubmitting ? "Logger inn..." : "Logg inn"}
+          </Button>
+          <button
+            type="button"
+            className="mt-4 w-full text-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            onClick={() => goTo("login")}
+            disabled={isSubmitting}
+          >
+            Bruk en annen e-post
+          </button>
+        </form>
+      ) : null}
+
+      {notice ? (
+        <p className="mt-4 text-sm text-muted-foreground" role="status">
+          {notice}
+        </p>
+      ) : null}
       {error ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
           {error}
@@ -175,22 +234,25 @@ function TextField({
   value,
   onChange,
   type = "text",
+  className = "",
+  required = true,
   ...inputProps
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   type?: string
+  className?: string
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value">) {
   return (
-    <label className="block space-y-2">
+    <label className={`block space-y-2 ${className}`}>
       <span className="text-sm font-medium">{label}</span>
       <input
         className="h-10 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        required
+        required={required}
         {...inputProps}
       />
     </label>

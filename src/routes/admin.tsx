@@ -56,7 +56,6 @@ import {
   calculateRoundTotals,
 } from "@/lib/order-totals"
 import { addCoffeeVat } from "@/lib/vat"
-import { unlockAdmin } from "@/server/auth.functions"
 import {
   addCoffee,
   archiveCoffee,
@@ -64,6 +63,8 @@ import {
   deleteOrder,
   getAdminDashboard,
   openRound,
+  setCustomerActive,
+  setCustomerRole,
   updateCoffee,
   updateOrderFlags,
   updateRoundDetails,
@@ -95,9 +96,7 @@ function AdminPage() {
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl space-y-5">
         <AdminHeader />
-        {!data.unlocked ? (
-          <AdminPasswordForm onUnlocked={() => router.invalidate()} />
-        ) : null}
+        {!data.unlocked ? <AdminAccessNotice /> : null}
         {data.unlocked ? (
           <DashboardView dashboard={data} refresh={() => router.invalidate()} />
         ) : null}
@@ -136,58 +135,21 @@ export function AdminHeader() {
   )
 }
 
-export function AdminPasswordForm({
-  onUnlocked,
-}: {
-  onUnlocked: () => Promise<void>
-}) {
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError("")
-    const result = await unlockAdmin({ data: { password } })
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    await onUnlocked()
-  }
-
+export function AdminAccessNotice() {
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="max-w-md rounded-lg border border-(--ledger-line) bg-card p-5"
-    >
+    <div className="max-w-md rounded-lg border border-(--ledger-line) bg-card p-5">
       <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
         TILGANG
       </p>
-      <h2 className="mt-2 text-xl">Lås opp admin</h2>
-      <label className="mt-5 block space-y-2">
-        <span className="text-sm font-medium">Adminpassord</span>
-        <input
-          className="h-10 w-full rounded-md border border-input px-3 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "admin-password-error" : undefined}
-        />
-      </label>
-      {error ? (
-        <p
-          id="admin-password-error"
-          className="mt-3 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-      <Button className="mt-5" type="submit">
-        Lås opp
+      <h2 className="mt-2 text-xl">Ingen admintilgang</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Denne siden krever en adminkonto. Logg inn med en konto som har
+        admintilgang, eller be en admin om tilgang.
+      </p>
+      <Button className="mt-5" variant="outline" render={<Link to="/" />}>
+        Til forsiden
       </Button>
-    </form>
+    </div>
   )
 }
 
@@ -1214,9 +1176,11 @@ function ActiveOrderRow({
 export function CustomersSection({
   customers,
   highlightedCustomerId,
+  refresh,
 }: {
   customers: Dashboard["customers"]
   highlightedCustomerId?: string
+  refresh?: () => Promise<void> | void
 }) {
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
@@ -1263,14 +1227,82 @@ export function CustomersSection({
             >
               {customer.email}
             </a>
-            <StatusPill
-              active={customer.isActive}
-              label={customer.isActive ? "Aktiv" : "Inaktiv"}
-            />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <StatusPill
+                active={customer.role === "admin"}
+                label={customer.role === "admin" ? "Admin" : "Medlem"}
+              />
+              <StatusPill
+                active={customer.isActive}
+                label={customer.isActive ? "Aktiv" : "Inaktiv"}
+              />
+              {refresh ? (
+                <CustomerAdminControls customer={customer} refresh={refresh} />
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
     </section>
+  )
+}
+
+function CustomerAdminControls({
+  customer,
+  refresh,
+}: {
+  customer: Dashboard["customers"][number]
+  refresh: () => Promise<void> | void
+}) {
+  const [isBusy, setIsBusy] = useState(false)
+
+  async function run(action: () => Promise<unknown>) {
+    setIsBusy(true)
+    try {
+      await action()
+      await refresh()
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={isBusy}
+        onClick={() =>
+          run(() =>
+            setCustomerRole({
+              data: {
+                customerId: customer.id,
+                role: customer.role === "admin" ? "member" : "admin",
+              },
+            })
+          )
+        }
+      >
+        {customer.role === "admin" ? "Fjern admin" : "Gjør admin"}
+      </Button>
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={isBusy}
+        onClick={() =>
+          run(() =>
+            setCustomerActive({
+              data: {
+                customerId: customer.id,
+                isActive: !customer.isActive,
+              },
+            })
+          )
+        }
+      >
+        {customer.isActive ? "Deaktiver" : "Aktiver"}
+      </Button>
+    </div>
   )
 }
 

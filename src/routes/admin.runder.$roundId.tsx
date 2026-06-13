@@ -5,14 +5,14 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router"
+import { ChevronDown } from "lucide-react"
 import {
+  AdminAccessNotice,
   AdminHeader,
-  AdminPasswordForm,
   ClosedRoundSummary,
   EditRoundForm,
   OpenRoundSection,
 } from "./admin"
-import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -94,7 +94,7 @@ function AdminRoundDetailPage() {
       <div className="mx-auto w-full max-w-7xl space-y-5">
         <AdminHeader />
         {!data.unlocked ? (
-          <AdminPasswordForm onUnlocked={() => router.invalidate()} />
+          <AdminAccessNotice />
         ) : null}
         {data.unlocked && !data.round ? (
           <section className="rounded-lg border border-(--ledger-line) bg-card p-5">

@@ -32,8 +32,8 @@ vi.mock("@/server/coffee", () => ({
 vi.mock("@/server/customer-access", () => ({
   getCustomerRouteAccess: () =>
     Promise.resolve({
-      unlocked: true,
-      selectedCustomerId: "customer-1",
+      authenticated: true,
+      customerId: "customer-1",
     }),
 }))
 
