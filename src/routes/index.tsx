@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router"
 import { AppHeader } from "@/components/app-header"
 import { BRAND_NAME } from "@/components/brand"
 import { CustomerStatusPanel } from "@/components/customer-status-panel"
+import { LeaderboardTeaser } from "@/components/leaderboard-teaser"
 import { LogisticsFooter } from "@/components/logistics-footer"
 import { OrderForm } from "@/components/order-form"
 import { SupplierVoteBoard } from "@/components/supplier-vote-board"
@@ -35,6 +36,7 @@ function CustomerPage() {
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
         <AppHeader
           title={BRAND_NAME}
+          activeNav="home"
           selectedCustomer={data.selectedCustomer}
           onLogout={async () => {
             await logout()
@@ -51,13 +53,21 @@ function CustomerPage() {
               board={data.supplierBoard}
               myVoteSupplierId={data.myVoteSupplierId}
             />
+            {data.leaderboardTeaser ? (
+              <LeaderboardTeaser teaser={data.leaderboardTeaser} />
+            ) : null}
           </>
         ) : null}
         {data.selectedCustomer && data.openRound ? (
-          <OrderForm
-            openRound={data.openRound}
-            selectedCustomer={data.selectedCustomer}
-          />
+          <>
+            <OrderForm
+              openRound={data.openRound}
+              selectedCustomer={data.selectedCustomer}
+            />
+            {data.leaderboardTeaser ? (
+              <LeaderboardTeaser teaser={data.leaderboardTeaser} />
+            ) : null}
+          </>
         ) : null}
         <LogisticsFooter customers={data.customers} />
       </div>

@@ -9,7 +9,9 @@ import {
   buildRoundNotificationEmails,
   sendNotificationEmail,
 } from "./notifications"
+import type { LeaderboardInput, LeaderboardResult } from "@/lib/leaderboard"
 import { db } from "@/db/client"
+import { buildLeaderboard } from "@/lib/leaderboard"
 import { calculateRoundTotals } from "@/lib/order-totals"
 import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
 import { fetchPickupSlotsFromIcsCalendar } from "@/lib/pickup-slots"
@@ -225,6 +227,60 @@ async function getOrderSummaries(roundIds: Array<string>) {
   return Array.from(byOrder.values())
 }
 
+async function getCompletedLeaderboardResult(): Promise<LeaderboardResult> {
+  const completedRounds = await db
+    .select()
+    .from(rounds)
+    .where(inArray(rounds.status, ["closed", "ready"]))
+    .orderBy(desc(rounds.closedAt))
+
+  const roundIds = completedRounds.map((round) => round.id)
+  if (roundIds.length === 0) return buildLeaderboard({ rounds: [] })
+
+  const [orderSummaries, supplierRows] = await Promise.all([
+    getOrderSummaries(roundIds),
+    db.select().from(suppliers),
+  ])
+  const suppliersById = new Map(
+    supplierRows.map((supplier) => [supplier.id, supplier])
+  )
+  const ordersByRoundId = groupBy(orderSummaries, (order) => order.roundId)
+
+  const input: LeaderboardInput = {
+    rounds: completedRounds.map((round) => ({
+      roundId: round.id,
+      supplierName: suppliersById.get(round.supplierId)?.name ?? "Ukjent",
+      closedAt: round.closedAt ? round.closedAt.toISOString() : null,
+      orders: (ordersByRoundId.get(round.id) ?? []).map((order) => ({
+        id: order.id,
+        customerId: order.customerId,
+        customerName: order.customerName,
+        createdAt: order.createdAt.toISOString(),
+        items: order.items.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          priceKr: item.priceKr,
+        })),
+      })),
+    })),
+  }
+
+  return buildLeaderboard(input)
+}
+
+function buildLeaderboardTeaser(result: LeaderboardResult) {
+  if (result.totals.completedRoundsCount === 0) return null
+  return {
+    top3: result.podium.map((entry) => ({
+      customerName: entry.customerName,
+      totalGrams: entry.totalGrams,
+      rank: entry.rank,
+    })),
+    totalGramsAllTime: result.totals.totalGramsAllTime,
+    completedRoundsCount: result.totals.completedRoundsCount,
+  }
+}
+
 async function getSupplierBoardData() {
   const [supplierRows, coffeeRows, voteRows] = await Promise.all([
     db.select().from(suppliers).orderBy(suppliers.name),
@@ -346,11 +402,14 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
   async () => {
     if (!(await getCurrentUser())) return { unlocked: false as const }
 
-    const [openRound, customerRows, selectedCustomer] = await Promise.all([
-      getOpenRoundRecord(),
-      getActiveCustomers(),
-      getSelectedCustomer(),
-    ])
+    const [openRound, customerRows, selectedCustomer, leaderboardResult] =
+      await Promise.all([
+        getOpenRoundRecord(),
+        getActiveCustomers(),
+        getSelectedCustomer(),
+        getCompletedLeaderboardResult(),
+      ])
+    const leaderboardTeaser = buildLeaderboardTeaser(leaderboardResult)
     if (!openRound) {
       const [supplierBoard, statusOrder] = await Promise.all([
         getSupplierBoardData(),
@@ -374,6 +433,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
         statusOrder,
         supplierBoard,
         myVoteSupplierId,
+        leaderboardTeaser,
       }
     }
 
@@ -415,6 +475,26 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
       customers: customerRows,
       selectedCustomer,
       statusOrder: null,
+      leaderboardTeaser,
+    }
+  }
+)
+
+export const getLeaderboardData = createServerFn({ method: "GET" }).handler(
+  async () => {
+    if (!(await getCurrentUser())) return { unlocked: false as const }
+
+    const [leaderboard, customerRows, selectedCustomer] = await Promise.all([
+      getCompletedLeaderboardResult(),
+      getActiveCustomers(),
+      getSelectedCustomer(),
+    ])
+
+    return {
+      unlocked: true as const,
+      leaderboard,
+      customers: customerRows,
+      selectedCustomer,
     }
   }
 )
