@@ -1,14 +1,8 @@
 import { createServerFn } from "@tanstack/react-start"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
-import {
-  assertAdmin,
-  clearSelectedCustomerSession,
-  getSelectedCustomerId,
-  isAdminUnlocked,
-  isCustomerUnlocked,
-  selectCustomerSession,
-} from "./auth.server"
+import { getAuthenticatedCustomerId } from "./auth.server"
+import { getCurrentUser, requireAdmin } from "./session"
 import {
   buildNotificationEmail,
   buildOrderUrl,
@@ -16,7 +10,6 @@ import {
   sendNotificationEmail,
 } from "./notifications"
 import { db } from "@/db/client"
-import { EIGHT_DIGIT_PHONE_PATTERN } from "@/lib/customer-phone"
 import { calculateRoundTotals } from "@/lib/order-totals"
 import { buildVippsPaymentUrl, createVippsMessage } from "@/lib/payment-link"
 import { fetchPickupSlotsFromIcsCalendar } from "@/lib/pickup-slots"
@@ -72,16 +65,14 @@ const updateRoundDetailsSchema = z.object({
   shippingKr: z.number().int().min(0).optional(),
   pickupInstructions: z.string().max(4000).optional().default(""),
 })
-const customerPhoneSchema = z
-  .string()
-  .trim()
-  .regex(EIGHT_DIGIT_PHONE_PATTERN, "Telefonnummer må være 8 siffer")
-const customerInputSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  phone: customerPhoneSchema,
-  email: z.string().trim().email().max(120),
+const setCustomerRoleSchema = z.object({
+  customerId: uuidSchema,
+  role: z.enum(["member", "admin"]),
 })
-const selectCustomerSchema = z.object({ customerId: uuidSchema })
+const setCustomerActiveSchema = z.object({
+  customerId: uuidSchema,
+  isActive: z.boolean(),
+})
 const submitOrderSchema = z.object({
   roundId: uuidSchema,
   items: z.array(
@@ -148,7 +139,7 @@ async function getActiveCustomers() {
 }
 
 async function getSelectedCustomer() {
-  const customerId = await getSelectedCustomerId()
+  const customerId = await getAuthenticatedCustomerId()
   if (!customerId) return null
 
   const customerRows = await db
@@ -351,26 +342,9 @@ async function getLatestCustomerStatusOrder(customerId: string) {
   }
 }
 
-export const getCustomerLoginData = createServerFn({ method: "GET" }).handler(
-  async () => {
-    if (!(await isCustomerUnlocked())) return { unlocked: false as const }
-
-    const [customerRows, selectedCustomer] = await Promise.all([
-      getActiveCustomers(),
-      getSelectedCustomer(),
-    ])
-
-    return {
-      unlocked: true as const,
-      customers: customerRows,
-      selectedCustomer,
-    }
-  }
-)
-
 export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
   async () => {
-    if (!(await isCustomerUnlocked())) return { unlocked: false as const }
+    if (!(await getCurrentUser())) return { unlocked: false as const }
 
     const [openRound, customerRows, selectedCustomer] = await Promise.all([
       getOpenRoundRecord(),
@@ -447,7 +421,7 @@ export const getCustomerHomeData = createServerFn({ method: "GET" }).handler(
 
 export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
   async () => {
-    if (!(await isAdminUnlocked())) return { unlocked: false as const }
+    if (!(await getCurrentUser())?.isAdmin) return { unlocked: false as const }
 
     const [
       supplierRows,
@@ -527,7 +501,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).handler(
 export const getAdminRoundDetail = createServerFn({ method: "GET" })
   .inputValidator((input) => adminRoundDetailSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isAdminUnlocked())) return { unlocked: false as const }
+    if (!(await getCurrentUser())?.isAdmin) return { unlocked: false as const }
 
     const roundRows = await db
       .select()
@@ -565,7 +539,7 @@ export const getAdminRoundDetail = createServerFn({ method: "GET" })
 export const addCoffee = createServerFn({ method: "POST" })
   .inputValidator((input) => addCoffeeSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const [coffee] = await db.insert(coffees).values(data).returning()
     return coffee
   })
@@ -573,7 +547,7 @@ export const addCoffee = createServerFn({ method: "POST" })
 export const updateCoffee = createServerFn({ method: "POST" })
   .inputValidator((input) => updateCoffeeSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const [coffee] = await db
       .update(coffees)
       .set({
@@ -593,7 +567,7 @@ export const updateCoffee = createServerFn({ method: "POST" })
 export const archiveCoffee = createServerFn({ method: "POST" })
   .inputValidator((input) => archiveCoffeeSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const [coffee] = await db
       .update(coffees)
       .set({ isDeleted: true, isActive: false, updatedAt: new Date() })
@@ -605,7 +579,7 @@ export const archiveCoffee = createServerFn({ method: "POST" })
 export const openRound = createServerFn({ method: "POST" })
   .inputValidator((input) => openRoundSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     if (await getOpenRoundRecord())
       throw new Error("A coffee round is already open")
 
@@ -656,7 +630,7 @@ export const openRound = createServerFn({ method: "POST" })
 export const updateRoundDetails = createServerFn({ method: "POST" })
   .inputValidator((input) => updateRoundDetailsSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
 
     const roundRows = await db
       .select()
@@ -690,7 +664,7 @@ export const updateRoundDetails = createServerFn({ method: "POST" })
 export const closeRound = createServerFn({ method: "POST" })
   .inputValidator((input) => closeRoundSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const updatedRoundRows = await db
       .update(rounds)
       .set({
@@ -710,7 +684,7 @@ export const closeRound = createServerFn({ method: "POST" })
 export const updateRoundShipping = createServerFn({ method: "POST" })
   .inputValidator((input) => updateRoundShippingSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const updatedRoundRows = await db
       .update(rounds)
       .set({ shippingKr: data.shippingKr, updatedAt: new Date() })
@@ -729,7 +703,7 @@ export const updateRoundShipping = createServerFn({ method: "POST" })
 export const markRoundReadyForPickup = createServerFn({ method: "POST" })
   .inputValidator((input) => markRoundReadySchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const updatedRoundRows = await db
       .update(rounds)
       .set({ status: "ready", updatedAt: new Date() })
@@ -741,52 +715,43 @@ export const markRoundReadyForPickup = createServerFn({ method: "POST" })
     return round
   })
 
-export const registerCustomer = createServerFn({ method: "POST" })
-  .inputValidator((input) => customerInputSchema.parse(input))
+export const setCustomerRole = createServerFn({ method: "POST" })
+  .inputValidator((input) => setCustomerRoleSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
+    await requireAdmin()
 
-    const [customer] = await db.insert(customers).values(data).returning()
-    await selectCustomerSession(customer.id)
-    return customer
-  })
-
-export const selectCustomer = createServerFn({ method: "POST" })
-  .inputValidator((input) => selectCustomerSchema.parse(input))
-  .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
-    const customerRows = await db
-      .select()
-      .from(customers)
-      .where(
-        and(eq(customers.id, data.customerId), eq(customers.isActive, true))
-      )
-      .limit(1)
-    const customer = customerRows.at(0)
+    const customer = (
+      await db
+        .update(customers)
+        .set({ role: data.role, updatedAt: new Date() })
+        .where(eq(customers.id, data.customerId))
+        .returning()
+    ).at(0)
     if (!customer) throw new Error("Customer not found")
-
-    await selectCustomerSession(customer.id)
     return customer
   })
 
-export const logoutCustomer = createServerFn({ method: "POST" }).handler(
-  async () => {
-    await clearSelectedCustomerSession()
-    return { ok: true }
-  }
-)
+export const setCustomerActive = createServerFn({ method: "POST" })
+  .inputValidator((input) => setCustomerActiveSchema.parse(input))
+  .handler(async ({ data }) => {
+    await requireAdmin()
+
+    const customer = (
+      await db
+        .update(customers)
+        .set({ isActive: data.isActive, updatedAt: new Date() })
+        .where(eq(customers.id, data.customerId))
+        .returning()
+    ).at(0)
+    if (!customer) throw new Error("Customer not found")
+    return customer
+  })
 
 export const castSupplierVote = createServerFn({ method: "POST" })
   .inputValidator((input) => castSupplierVoteSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
     const selectedCustomer = await getSelectedCustomer()
-    if (!selectedCustomer) throw new Error("Velg hvem som stemmer")
+    if (!selectedCustomer) throw new Error("Du må logge inn")
 
     const supplierRows = await db
       .select({ id: suppliers.id })
@@ -811,11 +776,8 @@ export const castSupplierVote = createServerFn({ method: "POST" })
 
 export const withdrawSupplierVote = createServerFn({ method: "POST" }).handler(
   async () => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
-    const selectedCustomerId = await getSelectedCustomerId()
-    if (!selectedCustomerId) throw new Error("Velg hvem som stemmer")
+    const selectedCustomerId = await getAuthenticatedCustomerId()
+    if (!selectedCustomerId) throw new Error("Du må logge inn")
 
     await db
       .delete(supplierVotes)
@@ -828,11 +790,8 @@ export const withdrawSupplierVote = createServerFn({ method: "POST" }).handler(
 export const submitOrder = createServerFn({ method: "POST" })
   .inputValidator((input) => submitOrderSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
     const selectedCustomer = await getSelectedCustomer()
-    if (!selectedCustomer) throw new Error("Velg hvem som bestiller")
+    if (!selectedCustomer) throw new Error("Du må logge inn")
 
     const items = data.items.filter((item) => item.quantity > 0)
     if (items.length === 0) throw new Error("Choose at least one coffee")
@@ -898,7 +857,7 @@ export const submitOrder = createServerFn({ method: "POST" })
 export const getAvailablePickupSlots = createServerFn({
   method: "GET",
 }).handler(async () => {
-  if (!(await isCustomerUnlocked())) throw new Error("Customer access required")
+  if (!(await getCurrentUser())) throw new Error("Du må logge inn")
 
   return getConfiguredPickupSlots()
 })
@@ -906,11 +865,8 @@ export const getAvailablePickupSlots = createServerFn({
 export const updateOrderPickupSlot = createServerFn({ method: "POST" })
   .inputValidator((input) => updateOrderPickupSlotSchema.parse(input))
   .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
-    const selectedCustomerId = await getSelectedCustomerId()
-    if (!selectedCustomerId) throw new Error("Velg hvem som bestiller")
+    const selectedCustomerId = await getAuthenticatedCustomerId()
+    if (!selectedCustomerId) throw new Error("Du må logge inn")
 
     const selectedSlotId = data.pickupSlotId.trim()
     const selectedSlot = selectedSlotId
@@ -951,11 +907,8 @@ export const updateOrderPickupSlot = createServerFn({ method: "POST" })
 export const getPaymentOrderData = createServerFn({ method: "GET" })
   .inputValidator((input) => z.object({ orderId: uuidSchema }).parse(input))
   .handler(async ({ data }) => {
-    if (!(await isCustomerUnlocked()))
-      throw new Error("Customer access required")
-
-    const selectedCustomerId = await getSelectedCustomerId()
-    if (!selectedCustomerId) throw new Error("Velg hvem som bestiller")
+    const selectedCustomerId = await getAuthenticatedCustomerId()
+    if (!selectedCustomerId) throw new Error("Du må logge inn")
 
     const orderRows = await db
       .select({ order: orders, round: rounds })
@@ -1014,7 +967,7 @@ export const getPaymentOrderData = createServerFn({ method: "GET" })
 export const deleteOrder = createServerFn({ method: "POST" })
   .inputValidator((input) => deleteOrderSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     await db.delete(orders).where(eq(orders.id, data.orderId))
     return { ok: true }
   })
@@ -1022,7 +975,7 @@ export const deleteOrder = createServerFn({ method: "POST" })
 export const updateOrderFlags = createServerFn({ method: "POST" })
   .inputValidator((input) => updateOrderFlagsSchema.parse(input))
   .handler(async ({ data }) => {
-    await assertAdmin()
+    await requireAdmin()
     const [order] = await db
       .update(orders)
       .set({

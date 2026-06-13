@@ -18,8 +18,7 @@ export const Route = createFileRoute("/bestilling/$orderId")({
   loader: async ({ location, params }) => {
     const access = await getCustomerRouteAccess()
     const loginRedirect = getCustomerLoginRedirect({
-      unlocked: access.unlocked,
-      hasSelectedCustomer: Boolean(access.selectedCustomerId),
+      authenticated: access.authenticated,
       currentPath: location.href,
     })
     if (loginRedirect) throw redirect(loginRedirect)

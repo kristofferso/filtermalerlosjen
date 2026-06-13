@@ -15,7 +15,9 @@ async function hmac(message: string, secret: string) {
     .replaceAll("=", "")
 }
 
-export async function createSessionToken({ purpose, secret }: { purpose: "admin" | "customer"; secret: string }) {
+export type SessionPurpose = "admin" | "customer" | "gate"
+
+export async function createSessionToken({ purpose, secret }: { purpose: SessionPurpose; secret: string }) {
   const payload = `${purpose}.${Date.now()}`
   const signature = await hmac(payload, secret)
   return `${payload}.${signature}`
@@ -39,7 +41,7 @@ export async function verifySessionToken({
   secret,
 }: {
   token: string | undefined
-  purpose: "admin" | "customer"
+  purpose: SessionPurpose
   secret: string
 }) {
   if (!token) return false
@@ -73,4 +75,33 @@ export function requireEnv(name: string) {
     throw new Error(`${name} is required`)
   }
   return value
+}
+
+export const LOGIN_CODE_LENGTH = 6
+export const LOGIN_CODE_TTL_MS = 10 * 60 * 1000
+export const LOGIN_CODE_MAX_ATTEMPTS = 5
+export const LOGIN_CODE_RESEND_COOLDOWN_MS = 30 * 1000
+
+export function normalizeEmail(email: string) {
+  return email.trim().toLowerCase()
+}
+
+export function generateLoginCode() {
+  const max = 10 ** LOGIN_CODE_LENGTH
+  const buffer = new Uint32Array(1)
+  crypto.getRandomValues(buffer)
+  const value = buffer[0] % max
+  return value.toString().padStart(LOGIN_CODE_LENGTH, "0")
+}
+
+export async function hashLoginCode(code: string, secret: string) {
+  return hmac(`login-code.${code}`, secret)
+}
+
+export function isLoginCodeExpired(expiresAt: Date, now: Date = new Date()) {
+  return expiresAt.getTime() <= now.getTime()
+}
+
+export function isLoginCodeAttemptsExceeded(attempts: number) {
+  return attempts >= LOGIN_CODE_MAX_ATTEMPTS
 }

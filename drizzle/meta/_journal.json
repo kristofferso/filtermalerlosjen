@@ -64,6 +64,13 @@
       "when": 1781266757261,
       "tag": "0008_noisy_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781297077977,
+      "tag": "0009_faithful_wolf_cub",
+      "breakpoints": true
     }
   ]
 }
