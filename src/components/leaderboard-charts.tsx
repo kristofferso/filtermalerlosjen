@@ -1,4 +1,12 @@
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  XAxis,
+  YAxis,
+} from "recharts"
 import type {
   CoffeePopularityPoint,
   GramsPerRoundPoint,
@@ -15,8 +23,9 @@ const chartConfig = {
   grams: { label: "Gram", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
-// Shades of the identity colour: one hue, descending opacity per bar.
-const SHADE_OPACITIES = [1, 0.82, 0.66, 0.52, 0.42]
+// Shades of the identity colour: one hue, descending opacity per bar. Kept
+// light enough that the dark in-bar value labels stay legible on every bar.
+const SHADE_OPACITIES = [1, 0.9, 0.8, 0.72, 0.64]
 
 function shadeOpacity(index: number) {
   return SHADE_OPACITIES[index % SHADE_OPACITIES.length]
@@ -46,7 +55,7 @@ export function LeaderboardCharts({
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       {hasRounds ? (
-        <div className="rounded-lg border border-(--ledger-line) bg-card p-4 sm:p-5">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-(--ledger-line) bg-card p-4 sm:p-5">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Volum per runde
           </p>
@@ -76,6 +85,14 @@ export function LeaderboardCharts({
                 {charts.gramsPerRound.map((point, index) => (
                   <Cell key={point.roundId} fillOpacity={shadeOpacity(index)} />
                 ))}
+                <LabelList
+                  dataKey="grams"
+                  position="insideTop"
+                  offset={8}
+                  fill="var(--primary-foreground)"
+                  fontSize={11}
+                  formatter={gramsFormatter}
+                />
               </Bar>
             </BarChart>
           </ChartContainer>
@@ -83,13 +100,11 @@ export function LeaderboardCharts({
       ) : null}
 
       {hasCoffees ? (
-        <div className="rounded-lg border border-(--ledger-line) bg-card p-4 sm:p-5">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-(--ledger-line) bg-card p-4 sm:p-5">
           <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Populære sorter
           </p>
-          <h3 className="mt-1 mb-4 text-sm font-semibold">
-            Gram per kaffesort
-          </h3>
+          <h3 className="mt-1 mb-4 text-sm font-semibold">Gram per kaffesort</h3>
           <ChartContainer config={chartConfig} className="h-[220px] w-full">
             <BarChart
               accessibilityLayer
@@ -115,6 +130,14 @@ export function LeaderboardCharts({
                 {charts.coffeePopularity.map((point, index) => (
                   <Cell key={point.name} fillOpacity={shadeOpacity(index)} />
                 ))}
+                <LabelList
+                  dataKey="grams"
+                  position="insideRight"
+                  offset={8}
+                  fill="var(--primary-foreground)"
+                  fontSize={11}
+                  formatter={gramsFormatter}
+                />
               </Bar>
             </BarChart>
           </ChartContainer>
