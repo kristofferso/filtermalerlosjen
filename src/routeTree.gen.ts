@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TopplisteRouteImport } from './routes/toppliste'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +19,11 @@ import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
 import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
 import { Route as AdminRunderRoundIdHentemodusRouteImport } from './routes/admin.runder.$roundId.hentemodus'
 
+const TopplisteRoute = TopplisteRouteImport.update({
+  id: '/toppliste',
+  path: '/toppliste',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/toppliste': typeof TopplisteRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/toppliste': typeof TopplisteRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
+  '/toppliste': typeof TopplisteRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/login'
+    | '/toppliste'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/login'
+    | '/toppliste'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/login'
+    | '/toppliste'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -128,11 +140,19 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   LoginRoute: typeof LoginRoute
+  TopplisteRoute: typeof TopplisteRoute
   BestillingOrderIdRoute: typeof BestillingOrderIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/toppliste': {
+      id: '/toppliste'
+      path: '/toppliste'
+      fullPath: '/toppliste'
+      preLoaderRoute: typeof TopplisteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -221,6 +241,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   LoginRoute: LoginRoute,
+  TopplisteRoute: TopplisteRoute,
   BestillingOrderIdRoute: BestillingOrderIdRoute,
 }
 export const routeTree = rootRouteImport
