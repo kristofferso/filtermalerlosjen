@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
 import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
 import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
+import { Route as AdminEpostRouteImport } from './routes/admin.epost'
 import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
 import { Route as AdminRunderRoundIdHentemodusRouteImport } from './routes/admin.runder.$roundId.hentemodus'
 
@@ -54,6 +55,11 @@ const AdminKaffeRoute = AdminKaffeRouteImport.update({
   path: '/kaffe',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminEpostRoute = AdminEpostRouteImport.update({
+  id: '/epost',
+  path: '/epost',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminRunderRoundIdRoute = AdminRunderRoundIdRouteImport.update({
   id: '/runder/$roundId',
   path: '/runder/$roundId',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/toppliste': typeof TopplisteRoute
+  '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/toppliste': typeof TopplisteRoute
+  '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/toppliste': typeof TopplisteRoute
+  '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/toppliste'
+    | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/toppliste'
+    | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/toppliste'
+    | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
     | '/bestilling/$orderId'
@@ -195,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminKaffeRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/epost': {
+      id: '/admin/epost'
+      path: '/epost'
+      fullPath: '/admin/epost'
+      preLoaderRoute: typeof AdminEpostRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/runder/$roundId': {
       id: '/admin/runder/$roundId'
       path: '/runder/$roundId'
@@ -224,12 +243,14 @@ const AdminRunderRoundIdRouteWithChildren =
   AdminRunderRoundIdRoute._addFileChildren(AdminRunderRoundIdRouteChildren)
 
 interface AdminRouteChildren {
+  AdminEpostRoute: typeof AdminEpostRoute
   AdminKaffeRoute: typeof AdminKaffeRoute
   AdminKunderRoute: typeof AdminKunderRoute
   AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRouteWithChildren
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminEpostRoute: AdminEpostRoute,
   AdminKaffeRoute: AdminKaffeRoute,
   AdminKunderRoute: AdminKunderRoute,
   AdminRunderRoundIdRoute: AdminRunderRoundIdRouteWithChildren,
