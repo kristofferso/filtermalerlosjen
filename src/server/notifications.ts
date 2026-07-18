@@ -63,6 +63,90 @@ export function buildOrderUrl(orderId: string, baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/bestilling/${orderId}`
 }
 
+export function buildOrderPageUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/`
+}
+
+export function buildLogoUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/filtermalerlosjen-logo.png`
+}
+
+function formatRoundCloseDate(value: Date | string | null | undefined) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) return null
+  return new Intl.DateTimeFormat("nb-NO", {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(date)
+}
+
+export function buildRoundOpenedEmail({
+  to,
+  customerName,
+  orderPageUrl,
+  logoUrl,
+  supplierName,
+  closesAt,
+}: {
+  to: string
+  customerName: string
+  orderPageUrl: string
+  logoUrl?: string | null
+  supplierName?: string | null
+  closesAt?: Date | string | null
+}): NotificationEmail {
+  const supplier = supplierName?.trim()
+  const closeDate = formatRoundCloseDate(closesAt)
+  const actionLabel = "Legg inn bestilling"
+
+  const introBody =
+    "Tiden er inne. Enten du allerede er tom for kaffe, eller sitter på et berg med bønner du vurderer å flippe på Finn for litt kjappe penger — en ny innkjøpsrunde er i gang."
+  const detailSentences = [
+    supplier ? `Vi handler fra ${supplier} denne runden.` : null,
+    closeDate ? `Runden stenger ${closeDate}.` : null,
+  ].filter((sentence): sentence is string => sentence !== null)
+  const detailBody = detailSentences.join(" ")
+
+  const paragraphs = [introBody, detailBody].filter(Boolean)
+
+  const html = `<!doctype html>
+<html lang="no">
+  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 0;">
+      <p style="margin:0 0 16px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
+      ${paragraphs
+        .map(
+          (paragraph) =>
+            `<p style="margin:0 0 20px;line-height:1.6;color:#000000;">${escapeHtml(paragraph)}</p>`
+        )
+        .join("\n      ")}
+      <p style="margin:0 0 32px;">
+        <a href="${escapeAttribute(orderPageUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
+      </p>
+      <div style="border-top:1px solid #000000;padding-top:16px;">
+        <p style="margin:0 0 10px;line-height:1.4;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
+        ${
+          logoUrl
+            ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(BRAND_NAME)}" width="140" style="display:block;width:140px;max-width:60%;height:auto;" />`
+            : ""
+        }
+      </div>
+    </div>
+  </body>
+</html>`
+
+  const textParagraphs = paragraphs.join("\n\n")
+  const text = `Hei ${customerName},\n\n${textParagraphs}\n\n${actionLabel}: ${orderPageUrl}\n\n—\n${BRAND_NAME}`
+
+  return {
+    to,
+    subject: "Ny kafferunde er åpnet",
+    html,
+    text,
+  }
+}
+
 export function buildLoginCodeEmail({
   to,
   code,
@@ -142,10 +226,11 @@ export function buildRoundNotificationEmails(input: RoundNotificationInput) {
 }
 
 export const EMAIL_TEMPLATE_IDS = [
-  "login-code",
+  "round-opened",
   "order-confirmed",
   "payment-ready",
   "pickup-ready",
+  "login-code",
 ] as const
 
 export type EmailTemplateId = (typeof EMAIL_TEMPLATE_IDS)[number]
@@ -168,6 +253,8 @@ export type EmailTemplatePreview = {
 const SAMPLE_CUSTOMER_NAME = "Kari Nordmann"
 const SAMPLE_LOGIN_CODE = "123456"
 const SAMPLE_TOTAL_KR = 349
+const SAMPLE_SUPPLIER_NAME = "Solberg & Hansen"
+const SAMPLE_CLOSES_AT = "2026-05-12T18:00:00.000Z"
 
 const EMAIL_TEMPLATE_META: Record<
   EmailTemplateId,
@@ -177,6 +264,17 @@ const EMAIL_TEMPLATE_META: Record<
     mergeFields: Array<EmailTemplateMergeField>
   }
 > = {
+  "round-opened": {
+    label: "Ny runde åpnet",
+    description:
+      "Annonsering til medlemmene om at en ny kafferunde er åpnet for bestilling.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Leverandør", example: SAMPLE_SUPPLIER_NAME },
+      { label: "Stenger", example: "12. mai 2026 kl. 20:00" },
+      { label: "Bestillingslenke", example: "/" },
+    ],
+  },
   "login-code": {
     label: "Innloggingskode",
     description: "Sendes når noen ber om en engangskode for å logge inn.",
@@ -223,6 +321,15 @@ export function buildTemplateSampleEmail(
   const orderUrl = buildOrderUrl("eksempel-ordre", baseUrl)
 
   switch (id) {
+    case "round-opened":
+      return buildRoundOpenedEmail({
+        to,
+        customerName,
+        orderPageUrl: buildOrderPageUrl(baseUrl),
+        logoUrl: buildLogoUrl(baseUrl),
+        supplierName: SAMPLE_SUPPLIER_NAME,
+        closesAt: SAMPLE_CLOSES_AT,
+      })
     case "login-code":
       return buildLoginCodeEmail({ to, code: SAMPLE_LOGIN_CODE, customerName })
     case "order-confirmed":
@@ -448,7 +555,7 @@ function renderHtml({
     orderUrl && actionLabel
       ? `
       <p style="margin:0;">
-        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;font-weight:700;">${escapeHtml(actionLabel)}</a>
+        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
       </p>`
       : ""
 
@@ -470,13 +577,15 @@ function renderText({
   title,
   body,
   orderUrl,
+  actionLabel = "Se bestilling",
 }: {
   customerName: string
   title: string
   body: string
   orderUrl: string | null
+  actionLabel?: string
 }) {
-  const action = orderUrl ? `\n\nSe bestilling: ${orderUrl}` : ""
+  const action = orderUrl ? `\n\n${actionLabel}: ${orderUrl}` : ""
   return `${BRAND_NAME}\n\n${title}\n\nHei ${customerName},\n\n${body}${action}`
 }
 

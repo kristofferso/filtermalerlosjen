@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react"
-import { AlertTriangle, Check, Circle, Mail, Send } from "lucide-react"
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Circle,
+  Mail,
+  Send,
+} from "lucide-react"
 import { createFileRoute } from "@tanstack/react-router"
 import { AdminAccessNotice, AdminHeader } from "./admin"
 import { Button } from "@/components/ui/button"
@@ -134,6 +141,10 @@ function TemplatesSection({
   templates: Array<Template>
   adminEmail: string
 }) {
+  const [activeId, setActiveId] = useState(templates[0]?.id ?? "")
+  const activeTemplate =
+    templates.find((template) => template.id === activeId) ?? templates[0]
+
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4 sm:p-5">
@@ -143,22 +154,48 @@ function TemplatesSection({
           </p>
           <h2 className="mt-1 text-lg">Gjeldende e-postmaler</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Forhåndsvisning med eksempeldata. Send en test til deg selv.
+            Velg en mal for å forhåndsvise. Send en test til deg selv.
           </p>
         </div>
         <span className="font-mono text-xs text-muted-foreground">
           {templates.length} maler
         </span>
       </div>
-      <div className="divide-y divide-border">
-        {templates.map((template) => (
+      {templates.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground sm:p-5">
+          Ingen maler tilgjengelig.
+        </p>
+      ) : (
+        <>
+          <div
+            className="flex flex-wrap gap-2 border-b border-border p-4 sm:p-5"
+            role="tablist"
+            aria-label="E-postmaler"
+          >
+            {templates.map((template) => {
+              const isActive = template.id === activeTemplate.id
+              return (
+                <Button
+                  key={template.id}
+                  type="button"
+                  size="sm"
+                  variant={isActive ? "default" : "outline"}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveId(template.id)}
+                >
+                  {template.label}
+                </Button>
+              )
+            })}
+          </div>
           <TemplateRow
-            key={template.id}
-            template={template}
+            key={activeTemplate.id}
+            template={activeTemplate}
             defaultTo={adminEmail}
           />
-        ))}
-      </div>
+        </>
+      )}
     </section>
   )
 }
@@ -203,30 +240,41 @@ function TemplateRow({
               {template.description}
             </p>
           </div>
-          <div>
-            <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
-              Emne
-            </p>
-            <p className="mt-1 text-sm font-medium">{template.subject}</p>
-          </div>
-          <div>
-            <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
-              Flettefelt
-            </p>
-            <ul className="mt-1.5 flex flex-wrap gap-1.5">
-              {template.mergeFields.map((field) => (
-                <li
-                  key={field.label}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
-                >
-                  <span className="font-medium">{field.label}</span>
-                  <span className="font-mono text-muted-foreground">
-                    {field.example}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <details className="group rounded-lg border border-border bg-muted/20">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 text-sm font-medium">
+              <span>Maldetaljer</span>
+              <ChevronDown
+                className="size-4 text-muted-foreground transition-transform group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="space-y-3 border-t border-border p-3">
+              <div>
+                <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+                  Emne
+                </p>
+                <p className="mt-1 text-sm font-medium">{template.subject}</p>
+              </div>
+              <div>
+                <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+                  Flettefelt
+                </p>
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                  {template.mergeFields.map((field) => (
+                    <li
+                      key={field.label}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+                    >
+                      <span className="font-medium">{field.label}</span>
+                      <span className="font-mono text-muted-foreground">
+                        {field.example}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </details>
           <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-3">
             <label className="min-w-48 flex-1 space-y-1">
               <span className="text-sm font-medium">Send test til</span>
@@ -298,7 +346,12 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(members.filter((m) => m.isActive).map((m) => m.id))
+    () =>
+      new Set(
+        members
+          .filter((member) => member.isActive && hasEmail(member))
+          .map((member) => member.id)
+      )
   )
   const [status, setStatus] = useState<
     | { kind: "idle" }
@@ -314,8 +367,13 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
   const canSend =
     subject.trim().length > 0 && body.trim().length > 0 && selectedCount > 0
 
-  const activeCount = useMemo(
-    () => members.filter((member) => member.isActive).length,
+  const emailMemberCount = useMemo(
+    () => members.filter((member) => hasEmail(member)).length,
+    [members]
+  )
+  const activeEmailCount = useMemo(
+    () =>
+      members.filter((member) => member.isActive && hasEmail(member)).length,
     [members]
   )
 
@@ -329,7 +387,11 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
   }
 
   function selectAll() {
-    setSelectedIds(new Set(members.map((member) => member.id)))
+    setSelectedIds(
+      new Set(
+        members.filter((member) => hasEmail(member)).map((member) => member.id)
+      )
+    )
   }
 
   function selectNone() {
@@ -339,7 +401,9 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
   function selectActive() {
     setSelectedIds(
       new Set(
-        members.filter((member) => member.isActive).map((member) => member.id)
+        members
+          .filter((member) => member.isActive && hasEmail(member))
+          .map((member) => member.id)
       )
     )
   }
@@ -376,7 +440,7 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
           </p>
         </div>
         <span className="font-mono text-xs text-muted-foreground">
-          {members.length} med e-post
+          {emailMemberCount} av {members.length} med e-post
         </span>
       </div>
 
@@ -413,7 +477,7 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
             <p className="text-sm font-medium">
               Mottakere{" "}
               <span className="font-mono text-muted-foreground">
-                {selectedCount}/{members.length}
+                {selectedCount}/{emailMemberCount}
               </span>
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -430,7 +494,7 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
                 size="xs"
                 type="button"
                 onClick={selectActive}
-                disabled={activeCount === 0}
+                disabled={activeEmailCount === 0}
               >
                 Kun aktive
               </Button>
@@ -446,22 +510,32 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
           </div>
           {members.length === 0 ? (
             <p className="p-3 text-sm text-muted-foreground">
-              Ingen medlemmer med registrert e-post.
+              Ingen registrerte medlemmer.
             </p>
           ) : (
             <ul className="max-h-80 divide-y divide-border overflow-y-auto">
               {members.map((member) => {
+                const memberHasEmail = hasEmail(member)
                 const checked = selectedIds.has(member.id)
                 return (
                   <li key={member.id}>
-                    <label className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/40">
+                    <label
+                      className={`flex items-center gap-3 p-3 ${
+                        memberHasEmail
+                          ? "cursor-pointer hover:bg-muted/40"
+                          : "cursor-not-allowed"
+                      }`}
+                    >
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={!memberHasEmail}
                         onChange={() => toggle(member.id)}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
+                      <span
+                        className={`min-w-0 flex-1 ${memberHasEmail ? "" : "opacity-60"}`}
+                      >
+                        <span className="flex flex-wrap items-center gap-2">
                           <span className="truncate font-medium">
                             {member.name}
                           </span>
@@ -475,9 +549,16 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
                               Inaktiv
                             </span>
                           ) : null}
+                          {!memberHasEmail ? (
+                            <span className="rounded border border-destructive/40 px-1 font-mono text-[0.6rem] tracking-wide text-destructive uppercase">
+                              Mangler e-post
+                            </span>
+                          ) : null}
                         </span>
                         <span className="block truncate font-mono text-xs text-muted-foreground">
-                          {member.email}
+                          {memberHasEmail
+                            ? member.email
+                            : "Ingen e-post registrert"}
                         </span>
                       </span>
                     </label>
@@ -580,6 +661,10 @@ function BroadcastFeedback({
       </ul>
     </div>
   )
+}
+
+function hasEmail(member: Member) {
+  return member.email.trim().length > 0
 }
 
 function StatusPill({ active, label }: { active: boolean; label: string }) {
