@@ -124,11 +124,11 @@ export function buildRoundOpenedEmail({
       <p style="margin:0 0 32px;">
         <a href="${escapeAttribute(orderPageUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
       </p>
-      <div style="border-top:1px solid #000000;padding-top:16px;">
+      <div style="border-top:1px solid #000000;padding-top:16px;text-align:center;">
         <p style="margin:0 0 10px;line-height:1.4;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
         ${
           logoUrl
-            ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(BRAND_NAME)}" width="140" style="display:block;width:140px;max-width:60%;height:auto;" />`
+            ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(BRAND_NAME)}" width="47" style="display:block;width:47px;max-width:20%;height:auto;margin:0 auto;" />`
             : ""
         }
       </div>
