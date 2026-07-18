@@ -1,4 +1,5 @@
 import { BRAND_NAME } from "@/components/brand"
+import { markdownToSafeHtml } from "@/lib/markdown"
 
 export type NotificationKind =
   | "order-confirmed"
@@ -140,6 +141,193 @@ export function buildRoundNotificationEmails(input: RoundNotificationInput) {
   })
 }
 
+export const EMAIL_TEMPLATE_IDS = [
+  "login-code",
+  "order-confirmed",
+  "payment-ready",
+  "pickup-ready",
+] as const
+
+export type EmailTemplateId = (typeof EMAIL_TEMPLATE_IDS)[number]
+
+export type EmailTemplateMergeField = {
+  label: string
+  example: string
+}
+
+export type EmailTemplatePreview = {
+  id: EmailTemplateId
+  label: string
+  description: string
+  subject: string
+  html: string
+  text: string
+  mergeFields: Array<EmailTemplateMergeField>
+}
+
+const SAMPLE_CUSTOMER_NAME = "Kari Nordmann"
+const SAMPLE_LOGIN_CODE = "123456"
+const SAMPLE_TOTAL_KR = 349
+
+const EMAIL_TEMPLATE_META: Record<
+  EmailTemplateId,
+  {
+    label: string
+    description: string
+    mergeFields: Array<EmailTemplateMergeField>
+  }
+> = {
+  "login-code": {
+    label: "Innloggingskode",
+    description: "Sendes når noen ber om en engangskode for å logge inn.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Kode", example: SAMPLE_LOGIN_CODE },
+    ],
+  },
+  "order-confirmed": {
+    label: "Bestilling mottatt",
+    description:
+      "Kvittering til kunden rett etter at en bestilling er lagt inn.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Bestillingslenke", example: "/bestilling/…" },
+    ],
+  },
+  "payment-ready": {
+    label: "Oppgjør klart",
+    description: "Sendes når runden lukkes og kunden skal betale sin andel.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Beløp", example: `${SAMPLE_TOTAL_KR} kr` },
+      { label: "Bestillingslenke", example: "/bestilling/…" },
+    ],
+  },
+  "pickup-ready": {
+    label: "Klar for henting",
+    description: "Sendes når kaffen er kommet og kan hentes.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Betalingsstatus", example: "Betalt / Ikke betalt" },
+      { label: "Hentestatus", example: "Hentet / Ikke hentet" },
+      { label: "Bestillingslenke", example: "/bestilling/…" },
+    ],
+  },
+}
+
+export function buildTemplateSampleEmail(
+  id: EmailTemplateId,
+  { to, baseUrl }: { to: string; baseUrl: string }
+): NotificationEmail {
+  const customerName = SAMPLE_CUSTOMER_NAME
+  const orderUrl = buildOrderUrl("eksempel-ordre", baseUrl)
+
+  switch (id) {
+    case "login-code":
+      return buildLoginCodeEmail({ to, code: SAMPLE_LOGIN_CODE, customerName })
+    case "order-confirmed":
+      return buildNotificationEmail({
+        kind: "order-confirmed",
+        to,
+        customerName,
+        orderUrl,
+      })
+    case "payment-ready":
+      return buildNotificationEmail({
+        kind: "payment-ready",
+        to,
+        customerName,
+        orderUrl,
+        totalKr: SAMPLE_TOTAL_KR,
+      })
+    case "pickup-ready":
+      return buildNotificationEmail({
+        kind: "pickup-ready",
+        to,
+        customerName,
+        orderUrl,
+        paid: true,
+        collected: false,
+      })
+  }
+}
+
+export function buildEmailTemplatePreviews(
+  baseUrl: string
+): Array<EmailTemplatePreview> {
+  return EMAIL_TEMPLATE_IDS.map((id) => {
+    const email = buildTemplateSampleEmail(id, {
+      to: "test@eksempel.no",
+      baseUrl,
+    })
+    const meta = EMAIL_TEMPLATE_META[id]
+    return {
+      id,
+      label: meta.label,
+      description: meta.description,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      mergeFields: meta.mergeFields,
+    }
+  })
+}
+
+const BROADCAST_NAME_MERGE_PATTERN = /\{\{\s*(?:navn|name)\s*\}\}/gi
+
+export function applyBroadcastMergeFields(body: string, customerName: string) {
+  return body.replace(BROADCAST_NAME_MERGE_PATTERN, customerName)
+}
+
+export function buildBroadcastEmail({
+  to,
+  subject,
+  body,
+  customerName,
+}: {
+  to: string
+  subject: string
+  body: string
+  customerName: string
+}): NotificationEmail {
+  const personalizedBody = applyBroadcastMergeFields(body, customerName)
+  const bodyHtml = markdownToSafeHtml(personalizedBody)
+
+  const html = `<!doctype html>
+<html lang="no">
+  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+      <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
+      <h1 style="margin:0 0 20px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">${escapeHtml(subject)}</h1>
+      <div style="line-height:1.6;color:#000000;">${bodyHtml}</div>
+    </div>
+  </body>
+</html>`
+
+  const text = `${BRAND_NAME}\n\n${subject}\n\n${personalizedBody}`
+
+  return { to, subject, html, text }
+}
+
+export type NotificationDeliveryStatus = {
+  deliveryConfigured: boolean
+  from: string | null
+  replyTo: string | null
+  whitelist: Array<string>
+}
+
+export function getNotificationDeliveryStatus(
+  env: NotificationEnv = process.env
+): NotificationDeliveryStatus {
+  const config = getNotificationConfig(env)
+  return {
+    deliveryConfigured: config !== null,
+    from: config?.from ?? null,
+    replyTo: config?.replyTo ?? null,
+    whitelist: parseRecipientWhitelist(env.NOTIFICATION_RECIPIENT_WHITELIST),
+  }
+}
+
 export function applyNotificationRecipientWhitelist(
   email: NotificationEmail,
   env: NotificationEnv
@@ -206,7 +394,9 @@ function parseRecipientWhitelist(value: string | undefined) {
     .filter(Boolean)
 }
 
-function getNotificationConfig(env: NotificationEnv): NotificationConfig | null {
+function getNotificationConfig(
+  env: NotificationEnv
+): NotificationConfig | null {
   const apiKey = env.RESEND_API_KEY?.trim()
   const from = env.NOTIFICATION_FROM?.trim()
   const replyTo = env.NOTIFICATION_REPLY_TO?.trim()

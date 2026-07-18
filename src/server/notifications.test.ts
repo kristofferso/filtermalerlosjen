@@ -1,10 +1,15 @@
 import { describe, expect, test, vi } from "vitest"
 import {
+  EMAIL_TEMPLATE_IDS,
+  applyBroadcastMergeFields,
   applyNotificationRecipientWhitelist,
+  buildBroadcastEmail,
+  buildEmailTemplatePreviews,
   buildLoginCodeEmail,
   buildNotificationEmail,
   buildOrderUrl,
   buildRoundNotificationEmails,
+  getNotificationDeliveryStatus,
   sendNotificationEmail,
 } from "./notifications"
 
@@ -75,7 +80,75 @@ describe("notification templates", () => {
 
     expect(emails).toHaveLength(1)
     expect(emails[0]?.to).toBe("kari@example.com")
-    expect(emails[0]?.text).toContain(buildOrderUrl("order-1", "https://kaffe.example"))
+    expect(emails[0]?.text).toContain(
+      buildOrderUrl("order-1", "https://kaffe.example")
+    )
+  })
+})
+
+describe("email template previews", () => {
+  test("renders a preview for every template with sample data", () => {
+    const previews = buildEmailTemplatePreviews("https://kaffe.example")
+
+    expect(previews.map((preview) => preview.id)).toEqual([
+      ...EMAIL_TEMPLATE_IDS,
+    ])
+
+    const payment = previews.find((preview) => preview.id === "payment-ready")
+    expect(payment?.subject).toBe("Kaffeoppgjøret er klart")
+    expect(payment?.html).toContain("349 kr")
+    expect(payment?.html).toContain("Kari Nordmann")
+    expect(payment?.mergeFields.map((field) => field.label)).toContain("Beløp")
+
+    const login = previews.find((preview) => preview.id === "login-code")
+    expect(login?.html).toContain("123456")
+  })
+})
+
+describe("broadcast emails", () => {
+  test("replaces the name merge field per recipient", () => {
+    expect(applyBroadcastMergeFields("Hei {{navn}}, velkommen", "Kari")).toBe(
+      "Hei Kari, velkommen"
+    )
+    expect(applyBroadcastMergeFields("Hei {{ NAME }}", "Ola")).toBe("Hei Ola")
+  })
+
+  test("builds a branded broadcast email with markdown and merged name", () => {
+    const email = buildBroadcastEmail({
+      to: "kari@example.com",
+      subject: "Ny runde",
+      body: "Hei {{navn}},\n\nVi åpner **mandag**.",
+      customerName: "Kari",
+    })
+
+    expect(email.to).toBe("kari@example.com")
+    expect(email.subject).toBe("Ny runde")
+    expect(email.html).toContain("Filtermalerlosjen")
+    expect(email.html).toContain("Hei Kari,")
+    expect(email.html).toContain("<strong>mandag</strong>")
+    expect(email.text).toContain("Hei Kari,")
+  })
+})
+
+describe("notification delivery status", () => {
+  test("reports unconfigured delivery and empty whitelist", () => {
+    const status = getNotificationDeliveryStatus({})
+    expect(status.deliveryConfigured).toBe(false)
+    expect(status.whitelist).toEqual([])
+  })
+
+  test("reports configuration and parsed whitelist", () => {
+    const status = getNotificationDeliveryStatus({
+      RESEND_API_KEY: "secret",
+      NOTIFICATION_FROM: "Filtermalerlosjen <kaffe@example.com>",
+      NOTIFICATION_RECIPIENT_WHITELIST: "admin@example.com, backup@example.com",
+    })
+    expect(status.deliveryConfigured).toBe(true)
+    expect(status.from).toBe("Filtermalerlosjen <kaffe@example.com>")
+    expect(status.whitelist).toEqual([
+      "admin@example.com",
+      "backup@example.com",
+    ])
   })
 })
 

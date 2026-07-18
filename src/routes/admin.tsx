@@ -1481,6 +1481,24 @@ function AdminIndexLinks({ dashboard }: { dashboard: Dashboard }) {
           {dashboard.customers.length} registrerte personer.
         </p>
       </Link>
+      <Link
+        to="/admin/epost"
+        className="rounded-lg border border-(--ledger-line) bg-card p-4 hover:bg-muted/30"
+      >
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          Utsending
+        </p>
+        <h2 className="mt-1 flex items-center justify-between gap-3 text-lg">
+          <span>E-post</span>
+          <ArrowRight
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Test maler og send meldinger til medlemmer.
+        </p>
+      </Link>
     </section>
   )
 }
