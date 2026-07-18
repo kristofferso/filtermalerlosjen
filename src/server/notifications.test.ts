@@ -135,13 +135,43 @@ describe("round opened email", () => {
       to: "kari@example.com",
       customerName: "Kari",
       orderPageUrl: "https://kaffe.example/",
+      logoUrl: "https://kaffe.example/filtermalerlosjen-logo.png",
       supplierName: "Solberg & Hansen",
+      closesAt: "2026-05-12T18:00:00.000Z",
     })
 
     expect(email.subject).toBe("Ny kafferunde er åpnet")
+    // Greeting replaces the title; no brand kicker or heading at the top.
+    expect(email.html).toContain("Hei Kari,")
+    expect(email.html).not.toContain("<h1")
+    expect(email.html).toContain("Tiden er inne")
+    expect(email.html).toContain("flippe på Finn")
     expect(email.html).toContain("Solberg &amp; Hansen")
+    expect(email.html).toContain("Runden stenger")
+    expect(email.html).toContain("2026")
+    // No horizontal padding on the container.
+    expect(email.html).toContain("padding:32px 0")
+    // Footer sign-off with logo.
+    expect(email.html).toContain(
+      "https://kaffe.example/filtermalerlosjen-logo.png"
+    )
     expect(email.html).toContain("https://kaffe.example/")
+    expect(email.text).toContain("Hei Kari,")
     expect(email.text).toContain("Legg inn bestilling: https://kaffe.example/")
+    expect(email.text).toContain("Filtermalerlosjen")
+  })
+
+  test("omits the close-date sentence when no close time is set", () => {
+    const email = buildRoundOpenedEmail({
+      to: "kari@example.com",
+      customerName: "Kari",
+      orderPageUrl: "https://kaffe.example/",
+      supplierName: null,
+      closesAt: null,
+    })
+
+    expect(email.html).not.toContain("Runden stenger")
+    expect(email.html).toContain("Tiden er inne")
   })
 })
 

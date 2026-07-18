@@ -67,41 +67,83 @@ export function buildOrderPageUrl(baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/`
 }
 
+export function buildLogoUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/filtermalerlosjen-logo.png`
+}
+
+function formatRoundCloseDate(value: Date | string | null | undefined) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) return null
+  return new Intl.DateTimeFormat("nb-NO", {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(date)
+}
+
 export function buildRoundOpenedEmail({
   to,
   customerName,
   orderPageUrl,
+  logoUrl,
   supplierName,
+  closesAt,
 }: {
   to: string
   customerName: string
   orderPageUrl: string
+  logoUrl?: string | null
   supplierName?: string | null
+  closesAt?: Date | string | null
 }): NotificationEmail {
-  const title = "Ny kafferunde er åpnet"
   const supplier = supplierName?.trim()
-  const body = supplier
-    ? `Vi handler fra ${supplier} denne runden. Legg inn bestillingen din før runden stenger.`
-    : "En ny runde er åpnet. Legg inn bestillingen din før runden stenger."
+  const closeDate = formatRoundCloseDate(closesAt)
   const actionLabel = "Legg inn bestilling"
+
+  const introBody =
+    "Tiden er inne. Enten du allerede er tom for kaffe, eller sitter på et berg med bønner du vurderer å flippe på Finn for litt kjappe penger — en ny innkjøpsrunde er i gang."
+  const detailSentences = [
+    supplier ? `Vi handler fra ${supplier} denne runden.` : null,
+    closeDate ? `Runden stenger ${closeDate}.` : null,
+  ].filter((sentence): sentence is string => sentence !== null)
+  const detailBody = detailSentences.join(" ")
+
+  const paragraphs = [introBody, detailBody].filter(Boolean)
+
+  const html = `<!doctype html>
+<html lang="no">
+  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 0;">
+      <p style="margin:0 0 16px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
+      ${paragraphs
+        .map(
+          (paragraph) =>
+            `<p style="margin:0 0 20px;line-height:1.6;color:#000000;">${escapeHtml(paragraph)}</p>`
+        )
+        .join("\n      ")}
+      <p style="margin:0 0 32px;">
+        <a href="${escapeAttribute(orderPageUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
+      </p>
+      <div style="border-top:1px solid #000000;padding-top:16px;">
+        <p style="margin:0 0 10px;line-height:1.4;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
+        ${
+          logoUrl
+            ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(BRAND_NAME)}" width="140" style="display:block;width:140px;max-width:60%;height:auto;" />`
+            : ""
+        }
+      </div>
+    </div>
+  </body>
+</html>`
+
+  const textParagraphs = paragraphs.join("\n\n")
+  const text = `Hei ${customerName},\n\n${textParagraphs}\n\n${actionLabel}: ${orderPageUrl}\n\n—\n${BRAND_NAME}`
 
   return {
     to,
-    subject: title,
-    html: renderHtml({
-      customerName,
-      title,
-      body,
-      orderUrl: orderPageUrl,
-      actionLabel,
-    }),
-    text: renderText({
-      customerName,
-      title,
-      body,
-      orderUrl: orderPageUrl,
-      actionLabel,
-    }),
+    subject: "Ny kafferunde er åpnet",
+    html,
+    text,
   }
 }
 
@@ -212,6 +254,7 @@ const SAMPLE_CUSTOMER_NAME = "Kari Nordmann"
 const SAMPLE_LOGIN_CODE = "123456"
 const SAMPLE_TOTAL_KR = 349
 const SAMPLE_SUPPLIER_NAME = "Solberg & Hansen"
+const SAMPLE_CLOSES_AT = "2026-05-12T18:00:00.000Z"
 
 const EMAIL_TEMPLATE_META: Record<
   EmailTemplateId,
@@ -228,6 +271,7 @@ const EMAIL_TEMPLATE_META: Record<
     mergeFields: [
       { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
       { label: "Leverandør", example: SAMPLE_SUPPLIER_NAME },
+      { label: "Stenger", example: "12. mai 2026 kl. 20:00" },
       { label: "Bestillingslenke", example: "/" },
     ],
   },
@@ -282,7 +326,9 @@ export function buildTemplateSampleEmail(
         to,
         customerName,
         orderPageUrl: buildOrderPageUrl(baseUrl),
+        logoUrl: buildLogoUrl(baseUrl),
         supplierName: SAMPLE_SUPPLIER_NAME,
+        closesAt: SAMPLE_CLOSES_AT,
       })
     case "login-code":
       return buildLoginCodeEmail({ to, code: SAMPLE_LOGIN_CODE, customerName })
