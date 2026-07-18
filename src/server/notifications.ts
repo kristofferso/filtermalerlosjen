@@ -63,6 +63,48 @@ export function buildOrderUrl(orderId: string, baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/bestilling/${orderId}`
 }
 
+export function buildOrderPageUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/+$/, "")}/`
+}
+
+export function buildRoundOpenedEmail({
+  to,
+  customerName,
+  orderPageUrl,
+  supplierName,
+}: {
+  to: string
+  customerName: string
+  orderPageUrl: string
+  supplierName?: string | null
+}): NotificationEmail {
+  const title = "Ny kafferunde er åpnet"
+  const supplier = supplierName?.trim()
+  const body = supplier
+    ? `Vi handler fra ${supplier} denne runden. Legg inn bestillingen din før runden stenger.`
+    : "En ny runde er åpnet. Legg inn bestillingen din før runden stenger."
+  const actionLabel = "Legg inn bestilling"
+
+  return {
+    to,
+    subject: title,
+    html: renderHtml({
+      customerName,
+      title,
+      body,
+      orderUrl: orderPageUrl,
+      actionLabel,
+    }),
+    text: renderText({
+      customerName,
+      title,
+      body,
+      orderUrl: orderPageUrl,
+      actionLabel,
+    }),
+  }
+}
+
 export function buildLoginCodeEmail({
   to,
   code,
@@ -142,10 +184,11 @@ export function buildRoundNotificationEmails(input: RoundNotificationInput) {
 }
 
 export const EMAIL_TEMPLATE_IDS = [
-  "login-code",
+  "round-opened",
   "order-confirmed",
   "payment-ready",
   "pickup-ready",
+  "login-code",
 ] as const
 
 export type EmailTemplateId = (typeof EMAIL_TEMPLATE_IDS)[number]
@@ -168,6 +211,7 @@ export type EmailTemplatePreview = {
 const SAMPLE_CUSTOMER_NAME = "Kari Nordmann"
 const SAMPLE_LOGIN_CODE = "123456"
 const SAMPLE_TOTAL_KR = 349
+const SAMPLE_SUPPLIER_NAME = "Solberg & Hansen"
 
 const EMAIL_TEMPLATE_META: Record<
   EmailTemplateId,
@@ -177,6 +221,16 @@ const EMAIL_TEMPLATE_META: Record<
     mergeFields: Array<EmailTemplateMergeField>
   }
 > = {
+  "round-opened": {
+    label: "Ny runde åpnet",
+    description:
+      "Annonsering til medlemmene om at en ny kafferunde er åpnet for bestilling.",
+    mergeFields: [
+      { label: "Navn", example: SAMPLE_CUSTOMER_NAME },
+      { label: "Leverandør", example: SAMPLE_SUPPLIER_NAME },
+      { label: "Bestillingslenke", example: "/" },
+    ],
+  },
   "login-code": {
     label: "Innloggingskode",
     description: "Sendes når noen ber om en engangskode for å logge inn.",
@@ -223,6 +277,13 @@ export function buildTemplateSampleEmail(
   const orderUrl = buildOrderUrl("eksempel-ordre", baseUrl)
 
   switch (id) {
+    case "round-opened":
+      return buildRoundOpenedEmail({
+        to,
+        customerName,
+        orderPageUrl: buildOrderPageUrl(baseUrl),
+        supplierName: SAMPLE_SUPPLIER_NAME,
+      })
     case "login-code":
       return buildLoginCodeEmail({ to, code: SAMPLE_LOGIN_CODE, customerName })
     case "order-confirmed":
@@ -448,7 +509,7 @@ function renderHtml({
     orderUrl && actionLabel
       ? `
       <p style="margin:0;">
-        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;font-weight:700;">${escapeHtml(actionLabel)}</a>
+        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
       </p>`
       : ""
 
@@ -470,13 +531,15 @@ function renderText({
   title,
   body,
   orderUrl,
+  actionLabel = "Se bestilling",
 }: {
   customerName: string
   title: string
   body: string
   orderUrl: string | null
+  actionLabel?: string
 }) {
-  const action = orderUrl ? `\n\nSe bestilling: ${orderUrl}` : ""
+  const action = orderUrl ? `\n\n${actionLabel}: ${orderUrl}` : ""
   return `${BRAND_NAME}\n\n${title}\n\nHei ${customerName},\n\n${body}${action}`
 }
 

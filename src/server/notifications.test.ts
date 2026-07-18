@@ -9,6 +9,7 @@ import {
   buildNotificationEmail,
   buildOrderUrl,
   buildRoundNotificationEmails,
+  buildRoundOpenedEmail,
   getNotificationDeliveryStatus,
   sendNotificationEmail,
 } from "./notifications"
@@ -102,6 +103,45 @@ describe("email template previews", () => {
 
     const login = previews.find((preview) => preview.id === "login-code")
     expect(login?.html).toContain("123456")
+  })
+
+  test("includes a round-opened announcement template", () => {
+    const previews = buildEmailTemplatePreviews("https://kaffe.example")
+    const roundOpened = previews.find(
+      (preview) => preview.id === "round-opened"
+    )
+
+    expect(roundOpened?.subject).toBe("Ny kafferunde er åpnet")
+    expect(roundOpened?.html).toContain("Legg inn bestilling")
+    expect(roundOpened?.html).toContain("https://kaffe.example/")
+    expect(roundOpened?.mergeFields.map((field) => field.label)).toContain(
+      "Leverandør"
+    )
+  })
+
+  test("renders action buttons with rounded corners", () => {
+    const previews = buildEmailTemplatePreviews("https://kaffe.example")
+    const withButton = previews.find(
+      (preview) => preview.id === "order-confirmed"
+    )
+
+    expect(withButton?.html).toContain("border-radius:8px")
+  })
+})
+
+describe("round opened email", () => {
+  test("links to the order page with a place-order action", () => {
+    const email = buildRoundOpenedEmail({
+      to: "kari@example.com",
+      customerName: "Kari",
+      orderPageUrl: "https://kaffe.example/",
+      supplierName: "Solberg & Hansen",
+    })
+
+    expect(email.subject).toBe("Ny kafferunde er åpnet")
+    expect(email.html).toContain("Solberg &amp; Hansen")
+    expect(email.html).toContain("https://kaffe.example/")
+    expect(email.text).toContain("Legg inn bestilling: https://kaffe.example/")
   })
 })
 

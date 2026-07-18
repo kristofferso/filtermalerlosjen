@@ -49,7 +49,7 @@ export const getEmailAdminData = createServerFn({ method: "GET" }).handler(
       unlocked: true as const,
       adminEmail: user.email,
       templates: buildEmailTemplatePreviews(baseUrl),
-      members: memberRows.filter((member) => member.email.trim().length > 0),
+      members: memberRows,
       delivery: getNotificationDeliveryStatus(),
     }
   }
