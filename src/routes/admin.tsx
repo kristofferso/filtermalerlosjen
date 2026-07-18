@@ -433,6 +433,7 @@ function RoundStarter({
   const [supplierId, setSupplierId] = useState(dashboard.suppliers[0]?.id ?? "")
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [closesAt, setClosesAt] = useState("")
+  const [notifyMembers, setNotifyMembers] = useState(false)
   const selectedSupplier =
     dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
     dashboard.suppliers[0]
@@ -454,6 +455,7 @@ function RoundStarter({
         supplierId: selectedSupplier.id,
         coffeeIds: selectedIds,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+        notifyMembers,
       },
     })
     await refresh()
@@ -517,25 +519,44 @@ function RoundStarter({
           </button>
         ))}
       </div>
-      <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
-        <label className="space-y-1">
-          <span className="text-sm font-medium">Stenger (valgfritt)</span>
+      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Stenger (valgfritt)</span>
+            <input
+              className="h-10 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+              type="datetime-local"
+              value={closesAt}
+              onChange={(event) => setClosesAt(event.target.value)}
+            />
+          </label>
+          <Button
+            className="w-full sm:w-auto"
+            size="lg"
+            disabled={selectedIds.length === 0}
+            onClick={handleOpenRound}
+            type="button"
+          >
+            Åpne runde med {selectedIds.length} kaffe
+          </Button>
+        </div>
+        <label className="flex items-start gap-2 border-t border-border pt-3 text-sm">
           <input
-            className="h-10 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            type="datetime-local"
-            value={closesAt}
-            onChange={(event) => setClosesAt(event.target.value)}
+            type="checkbox"
+            className="mt-0.5"
+            checked={notifyMembers}
+            onChange={(event) => setNotifyMembers(event.target.checked)}
           />
+          <span>
+            <span className="font-medium">
+              Send e-post til medlemmer ved åpning
+            </span>
+            <span className="mt-0.5 block text-muted-foreground">
+              Sender «Ny runde åpnet»-varselet til alle aktive medlemmer med
+              e-post.
+            </span>
+          </span>
         </label>
-        <Button
-          className="w-full sm:w-auto"
-          size="lg"
-          disabled={selectedIds.length === 0}
-          onClick={handleOpenRound}
-          type="button"
-        >
-          Åpne runde med {selectedIds.length} kaffe
-        </Button>
       </div>
     </div>
   )

@@ -4,9 +4,12 @@ import { z } from "zod"
 import { getAuthenticatedCustomerId } from "./auth.server"
 import { getCurrentUser, requireAdmin } from "./session"
 import {
+  buildLogoUrl,
   buildNotificationEmail,
+  buildOrderPageUrl,
   buildOrderUrl,
   buildRoundNotificationEmails,
+  buildRoundOpenedEmail,
   sendNotificationEmail,
 } from "./notifications"
 import type { LeaderboardInput, LeaderboardResult } from "@/lib/leaderboard"
@@ -51,6 +54,7 @@ const openRoundSchema = z.object({
   supplierId: uuidSchema,
   coffeeIds: z.array(uuidSchema).min(1),
   closesAt: z.string().datetime().nullable().optional(),
+  notifyMembers: z.boolean().optional().default(false),
 })
 const closeRoundSchema = z.object({
   roundId: uuidSchema,
@@ -346,6 +350,31 @@ async function notifyRoundCustomers(
         orderSummariesById.get(total.orderId)?.customerEmail?.trim() || null,
     })),
   })
+
+  await Promise.all(emails.map((email) => sendCustomerNotification(email)))
+}
+
+async function notifyMembersRoundOpened(
+  supplierName: string | null,
+  closesAt: Date | null
+) {
+  const members = await getActiveCustomers()
+  const baseUrl = getNotificationBaseUrl()
+  const orderPageUrl = buildOrderPageUrl(baseUrl)
+  const logoUrl = buildLogoUrl(baseUrl)
+
+  const emails = members
+    .filter((member) => member.email.trim().length > 0)
+    .map((member) =>
+      buildRoundOpenedEmail({
+        to: member.email.trim(),
+        customerName: member.name,
+        orderPageUrl,
+        logoUrl,
+        supplierName,
+        closesAt,
+      })
+    )
 
   await Promise.all(emails.map((email) => sendCustomerNotification(email)))
 }
@@ -681,13 +710,14 @@ export const openRound = createServerFn({ method: "POST" })
       )
     }
 
+    const closesAt = data.closesAt ? new Date(data.closesAt) : null
     const [round] = await db
       .insert(rounds)
       .values({
         supplierId: data.supplierId,
         status: "open",
         openedAt: new Date(),
-        closesAt: data.closesAt ? new Date(data.closesAt) : null,
+        closesAt,
       })
       .returning()
 
@@ -703,6 +733,15 @@ export const openRound = createServerFn({ method: "POST" })
 
     // Demand has been answered — clear the supplier voting board.
     await db.delete(supplierVotes)
+
+    if (data.notifyMembers) {
+      const supplierRows = await db
+        .select({ name: suppliers.name })
+        .from(suppliers)
+        .where(eq(suppliers.id, data.supplierId))
+        .limit(1)
+      await notifyMembersRoundOpened(supplierRows.at(0)?.name ?? null, closesAt)
+    }
 
     return round
   })
