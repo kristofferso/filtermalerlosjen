@@ -57,6 +57,79 @@ export function summarizeAdminRound(round: AdminRound) {
   }
 }
 
+type CoffeeHistoryRound = {
+  closedAt: Date | string | null
+  coffees: Array<{ coffeeId: string; nameSnapshot: string }>
+  orders: Array<{ items: Array<{ name: string; quantity: number }> }>
+}
+
+export type CoffeeOrderHistory = {
+  totalOrders: number
+  totalBags: number
+  previousOrders: number
+  previousBags: number
+}
+
+/**
+ * Aggregates historical demand per coffee from closed rounds so the admin can
+ * see, at a glance when opening a new round, how each coffee has sold. Returns
+ * a map keyed by coffee id with the all-time totals and the figures from the
+ * most recent round in which that coffee was offered ("forrige").
+ */
+export function summarizeCoffeeOrderHistory<TRound extends CoffeeHistoryRound>(
+  rounds: Array<TRound>
+): Map<string, CoffeeOrderHistory> {
+  const sortedRounds = [...rounds].sort(
+    (left, right) => getRoundTime(right.closedAt) - getRoundTime(left.closedAt)
+  )
+
+  const history = new Map<string, CoffeeOrderHistory>()
+  const previousAssigned = new Set<string>()
+
+  for (const round of sortedRounds) {
+    const coffeeIdByName = new Map(
+      round.coffees.map((coffee) => [coffee.nameSnapshot, coffee.coffeeId])
+    )
+    const roundBags = new Map<string, number>()
+    const roundOrders = new Map<string, number>()
+
+    for (const order of round.orders) {
+      const seenInOrder = new Set<string>()
+      for (const item of order.items) {
+        if (item.quantity <= 0) continue
+        const coffeeId = coffeeIdByName.get(item.name)
+        if (!coffeeId) continue
+        roundBags.set(coffeeId, (roundBags.get(coffeeId) ?? 0) + item.quantity)
+        seenInOrder.add(coffeeId)
+      }
+      for (const coffeeId of seenInOrder) {
+        roundOrders.set(coffeeId, (roundOrders.get(coffeeId) ?? 0) + 1)
+      }
+    }
+
+    for (const coffee of round.coffees) {
+      const bags = roundBags.get(coffee.coffeeId) ?? 0
+      const orders = roundOrders.get(coffee.coffeeId) ?? 0
+      const entry = history.get(coffee.coffeeId) ?? {
+        totalOrders: 0,
+        totalBags: 0,
+        previousOrders: 0,
+        previousBags: 0,
+      }
+      entry.totalOrders += orders
+      entry.totalBags += bags
+      if (!previousAssigned.has(coffee.coffeeId)) {
+        entry.previousOrders = orders
+        entry.previousBags = bags
+        previousAssigned.add(coffee.coffeeId)
+      }
+      history.set(coffee.coffeeId, entry)
+    }
+  }
+
+  return history
+}
+
 export function getRoundArchiveSections<TRound>(rounds: Array<TRound>) {
   const [latestRound, ...archivedRounds] = rounds
 
@@ -162,6 +235,12 @@ function getRoundStatusLabel(status: string) {
   if (status === "open") return "Aktiv"
   if (status === "ready") return "Klar for henting"
   return "Lukket"
+}
+
+function getRoundTime(value: Date | string | null) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
 }
 
 function getRoundCardDate(round: AdminRound) {

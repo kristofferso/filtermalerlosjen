@@ -15,6 +15,7 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router"
+import type { CoffeeOrderHistory } from "@/lib/admin-rounds"
 import { AdminVoteTally } from "@/components/admin-vote-tally"
 import { BRAND_NAME } from "@/components/brand"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,7 @@ import {
   getRoundArchiveSections,
   sortAdminOrderTotals,
   summarizeAdminRound,
+  summarizeCoffeeOrderHistory,
 } from "@/lib/admin-rounds"
 import {
   getCustomerEmailHref,
@@ -440,6 +442,7 @@ function RoundStarter({
   const visibleCoffees = dashboard.coffees.filter(
     (coffee) => coffee.supplierId === selectedSupplier.id && coffee.isActive
   )
+  const coffeeHistory = summarizeCoffeeOrderHistory(dashboard.closedRounds)
 
   function toggleCoffee(id: string) {
     setSelectedIds((current) =>
@@ -507,6 +510,7 @@ function RoundStarter({
                 <span className="block truncate text-sm text-muted-foreground">
                   {coffee.description || "Ingen beskrivelse"}
                 </span>
+                <CoffeeHistoryLine history={coffeeHistory.get(coffee.id)} />
               </span>
             </span>
             <span className="font-mono text-sm font-semibold">
@@ -559,6 +563,31 @@ function RoundStarter({
         </label>
       </div>
     </div>
+  )
+}
+
+function CoffeeHistoryLine({
+  history,
+}: {
+  history: CoffeeOrderHistory | undefined
+}) {
+  if (!history || history.totalOrders === 0) {
+    return (
+      <span className="mt-1 block font-mono text-xs text-muted-foreground">
+        Ingen tidligere bestillinger
+      </span>
+    )
+  }
+
+  return (
+    <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-muted-foreground">
+      <span>
+        Forrige {history.previousOrders} ordre · {history.previousBags} poser
+      </span>
+      <span>
+        Totalt {history.totalOrders} ordre · {history.totalBags} poser
+      </span>
+    </span>
   )
 }
 

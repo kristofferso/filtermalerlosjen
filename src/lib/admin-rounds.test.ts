@@ -6,6 +6,7 @@ import {
   getRoundArchiveSections,
   sortAdminOrderTotals,
   summarizeAdminRound,
+  summarizeCoffeeOrderHistory,
 } from "./admin-rounds"
 
 describe("summarizeAdminRound", () => {
@@ -57,6 +58,89 @@ describe("summarizeAdminRound", () => {
     expect(summary.supplierName).toBe("Ukjent")
     expect(summary.statusLabel).toBe("Aktiv")
     expect(summary.date).toEqual(new Date("2026-05-04T18:00:00Z"))
+  })
+})
+
+describe("summarizeCoffeeOrderHistory", () => {
+  test("aggregates all-time totals and the most recent round per coffee", () => {
+    const history = summarizeCoffeeOrderHistory([
+      {
+        closedAt: new Date("2026-05-10T10:00:00Z"),
+        coffees: [
+          { coffeeId: "ethiopia", nameSnapshot: "Ethiopia" },
+          { coffeeId: "brazil", nameSnapshot: "Brazil" },
+        ],
+        orders: [
+          {
+            items: [
+              { name: "Ethiopia", quantity: 2 },
+              { name: "Brazil", quantity: 1 },
+            ],
+          },
+          { items: [{ name: "Ethiopia", quantity: 3 }] },
+        ],
+      },
+      {
+        closedAt: new Date("2026-04-01T10:00:00Z"),
+        coffees: [{ coffeeId: "ethiopia", nameSnapshot: "Ethiopia" }],
+        orders: [{ items: [{ name: "Ethiopia", quantity: 4 }] }],
+      },
+    ])
+
+    expect(history.get("ethiopia")).toEqual({
+      previousOrders: 2,
+      previousBags: 5,
+      totalOrders: 3,
+      totalBags: 9,
+    })
+    expect(history.get("brazil")).toEqual({
+      previousOrders: 1,
+      previousBags: 1,
+      totalOrders: 1,
+      totalBags: 1,
+    })
+  })
+
+  test("takes the most recent round regardless of input order and skips empty items", () => {
+    const history = summarizeCoffeeOrderHistory([
+      {
+        closedAt: new Date("2026-03-01T10:00:00Z"),
+        coffees: [{ coffeeId: "kenya", nameSnapshot: "Kenya" }],
+        orders: [{ items: [{ name: "Kenya", quantity: 5 }] }],
+      },
+      {
+        closedAt: new Date("2026-06-01T10:00:00Z"),
+        coffees: [{ coffeeId: "kenya", nameSnapshot: "Kenya" }],
+        orders: [
+          { items: [{ name: "Kenya", quantity: 0 }] },
+          { items: [{ name: "Kenya", quantity: 2 }] },
+        ],
+      },
+    ])
+
+    expect(history.get("kenya")).toEqual({
+      previousOrders: 1,
+      previousBags: 2,
+      totalOrders: 2,
+      totalBags: 7,
+    })
+  })
+
+  test("keeps a coffee offered without orders at zero", () => {
+    const history = summarizeCoffeeOrderHistory([
+      {
+        closedAt: new Date("2026-05-01T10:00:00Z"),
+        coffees: [{ coffeeId: "decaf", nameSnapshot: "Decaf" }],
+        orders: [],
+      },
+    ])
+
+    expect(history.get("decaf")).toEqual({
+      previousOrders: 0,
+      previousBags: 0,
+      totalOrders: 0,
+      totalBags: 0,
+    })
   })
 })
 
