@@ -866,6 +866,15 @@ export const setCustomerActive = createServerFn({ method: "POST" })
     return customer
   })
 
+/**
+ * Reads the board back after a vote write so the client can render the new
+ * state straight from the mutation response instead of waiting for — and
+ * trusting — a route invalidation.
+ */
+async function readBoardAfterVote(myVoteSupplierId: string | null) {
+  return { supplierBoard: await getSupplierBoardData(), myVoteSupplierId }
+}
+
 export const castSupplierVote = createServerFn({ method: "POST" })
   .inputValidator((input) => castSupplierVoteSchema.parse(input))
   .handler(async ({ data }) => {
@@ -890,7 +899,7 @@ export const castSupplierVote = createServerFn({ method: "POST" })
         set: { supplierId: data.supplierId, createdAt: new Date() },
       })
 
-    return { ok: true }
+    return readBoardAfterVote(data.supplierId)
   })
 
 export const withdrawSupplierVote = createServerFn({ method: "POST" }).handler(
@@ -902,7 +911,7 @@ export const withdrawSupplierVote = createServerFn({ method: "POST" }).handler(
       .delete(supplierVotes)
       .where(eq(supplierVotes.customerId, selectedCustomerId))
 
-    return { ok: true }
+    return readBoardAfterVote(null)
   }
 )
 
