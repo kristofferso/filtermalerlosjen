@@ -674,6 +674,12 @@ export function CatalogSection({
           title="Kaffe"
           subtitle="Legg til, rediger og arkiver kaffelinjer."
         />
+        <Link
+          to="/admin/synk"
+          className="inline-flex shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:outline-none"
+        >
+          Synk med shoppen
+        </Link>
       </div>
       <div className="space-y-4 p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">

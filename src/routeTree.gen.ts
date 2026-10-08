@@ -16,6 +16,7 @@ import { Route as TopplisteRouteImport } from './routes/toppliste'
 import { Route as AdminEpostRouteImport } from './routes/admin.epost'
 import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
 import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
+import { Route as AdminSynkRouteImport } from './routes/admin.synk'
 import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
 import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
 import { Route as AdminRunderRoundIdHentemodusRouteImport } from './routes/admin.runder.$roundId.hentemodus'
@@ -55,6 +56,11 @@ const AdminKunderRoute = AdminKunderRouteImport.update({
   path: '/kunder',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSynkRoute = AdminSynkRouteImport.update({
+  id: '/synk',
+  path: '/synk',
+  getParentRoute: () => AdminRoute,
+} as any)
 const BestillingOrderIdRoute = BestillingOrderIdRouteImport.update({
   id: '/bestilling/$orderId',
   path: '/bestilling/$orderId',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -207,6 +219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminKunderRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/synk': {
+      id: '/admin/synk'
+      path: '/synk'
+      fullPath: '/admin/synk'
+      preLoaderRoute: typeof AdminSynkRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/bestilling/$orderId': {
       id: '/bestilling/$orderId'
       path: '/bestilling/$orderId'
@@ -246,6 +265,7 @@ interface AdminRouteChildren {
   AdminEpostRoute: typeof AdminEpostRoute
   AdminKaffeRoute: typeof AdminKaffeRoute
   AdminKunderRoute: typeof AdminKunderRoute
+  AdminSynkRoute: typeof AdminSynkRoute
   AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRouteWithChildren
 }
 
@@ -253,6 +273,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminEpostRoute: AdminEpostRoute,
   AdminKaffeRoute: AdminKaffeRoute,
   AdminKunderRoute: AdminKunderRoute,
+  AdminSynkRoute: AdminSynkRoute,
   AdminRunderRoundIdRoute: AdminRunderRoundIdRouteWithChildren,
 }
 
