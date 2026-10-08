@@ -49,6 +49,10 @@ import {
 import { formatKr, parseKroner } from "@/lib/money"
 import { getNextPickupWindowSelections } from "@/lib/pickup-slots"
 import {
+  ROUND_OPENED_DEFAULT_SUBJECT,
+  buildRoundOpenedDefaultBody,
+} from "@/lib/round-email"
+import {
   getOrderMoneyDetailRows,
   getOrderStatusPillClasses,
 } from "@/lib/admin-order-row-ui"
@@ -436,9 +440,18 @@ function RoundStarter({
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [closesAt, setClosesAt] = useState("")
   const [notifyMembers, setNotifyMembers] = useState(false)
+  const [emailSubject, setEmailSubject] = useState(ROUND_OPENED_DEFAULT_SUBJECT)
+  // null = follow the generated default (tracks supplier and close date).
+  const [editedEmailBody, setEditedEmailBody] = useState<string | null>(null)
   const selectedSupplier =
     dashboard.suppliers.find((supplier) => supplier.id === supplierId) ??
     dashboard.suppliers[0]
+  const emailBody =
+    editedEmailBody ??
+    buildRoundOpenedDefaultBody({
+      supplierName: selectedSupplier.name,
+      closesAt: closesAt ? new Date(closesAt) : null,
+    })
   const visibleCoffees = dashboard.coffees.filter(
     (coffee) => coffee.supplierId === selectedSupplier.id && coffee.isActive
   )
@@ -459,6 +472,8 @@ function RoundStarter({
         coffeeIds: selectedIds,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
         notifyMembers,
+        emailSubject: notifyMembers ? emailSubject : null,
+        emailBody: notifyMembers ? emailBody : null,
       },
     })
     await refresh()
@@ -561,6 +576,46 @@ function RoundStarter({
             </span>
           </span>
         </label>
+        {notifyMembers ? (
+          <div className="space-y-3">
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">Emne</span>
+              <input
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                value={emailSubject}
+                onChange={(event) => setEmailSubject(event.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">Melding</span>
+              <textarea
+                className="min-h-48 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                value={emailBody}
+                onChange={(event) => setEditedEmailBody(event.target.value)}
+              />
+              <span className="block text-xs text-muted-foreground">
+                Markdown støttes.{" "}
+                <code className="font-mono">{"{{navn}}"}</code> flettes inn per
+                mottaker. Knappen «Legg inn bestilling» og logoen legges til
+                automatisk under teksten.
+              </span>
+            </label>
+            {editedEmailBody !== null ||
+            emailSubject !== ROUND_OPENED_DEFAULT_SUBJECT ? (
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setEditedEmailBody(null)
+                  setEmailSubject(ROUND_OPENED_DEFAULT_SUBJECT)
+                }}
+              >
+                Tilbakestill til standardtekst
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

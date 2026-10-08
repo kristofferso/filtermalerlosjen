@@ -55,6 +55,8 @@ const openRoundSchema = z.object({
   coffeeIds: z.array(uuidSchema).min(1),
   closesAt: z.string().datetime().nullable().optional(),
   notifyMembers: z.boolean().optional().default(false),
+  emailSubject: z.string().trim().max(200).nullable().optional(),
+  emailBody: z.string().max(10_000).nullable().optional(),
 })
 const closeRoundSchema = z.object({
   roundId: uuidSchema,
@@ -356,7 +358,8 @@ async function notifyRoundCustomers(
 
 async function notifyMembersRoundOpened(
   supplierName: string | null,
-  closesAt: Date | null
+  closesAt: Date | null,
+  content: { subject?: string | null; body?: string | null } = {}
 ) {
   const members = await getActiveCustomers()
   const baseUrl = getNotificationBaseUrl()
@@ -373,6 +376,8 @@ async function notifyMembersRoundOpened(
         logoUrl,
         supplierName,
         closesAt,
+        subject: content.subject,
+        body: content.body,
       })
     )
 
@@ -740,7 +745,11 @@ export const openRound = createServerFn({ method: "POST" })
         .from(suppliers)
         .where(eq(suppliers.id, data.supplierId))
         .limit(1)
-      await notifyMembersRoundOpened(supplierRows.at(0)?.name ?? null, closesAt)
+      await notifyMembersRoundOpened(
+        supplierRows.at(0)?.name ?? null,
+        closesAt,
+        { subject: data.emailSubject, body: data.emailBody }
+      )
     }
 
     return round
