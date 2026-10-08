@@ -10,7 +10,7 @@ function productUrl(path: string) {
 }
 
 function imageUrl(path: string) {
-  return encodeURI(new URL(path, BASE_URL).toString())
+  return new URL(path, BASE_URL).toString()
 }
 
 const SOLBERG_HANSEN_COFFEES = [
