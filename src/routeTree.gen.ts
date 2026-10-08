@@ -9,25 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TopplisteRouteImport } from './routes/toppliste'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
-import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
-import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as TopplisteRouteImport } from './routes/toppliste'
 import { Route as AdminEpostRouteImport } from './routes/admin.epost'
+import { Route as AdminKaffeRouteImport } from './routes/admin.kaffe'
+import { Route as AdminKunderRouteImport } from './routes/admin.kunder'
+import { Route as AdminSynkRouteImport } from './routes/admin.synk'
+import { Route as BestillingOrderIdRouteImport } from './routes/bestilling.$orderId'
 import { Route as AdminRunderRoundIdRouteImport } from './routes/admin.runder.$roundId'
 import { Route as AdminRunderRoundIdHentemodusRouteImport } from './routes/admin.runder.$roundId.hentemodus'
 
-const TopplisteRoute = TopplisteRouteImport.update({
-  id: '/toppliste',
-  path: '/toppliste',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -35,19 +31,19 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BestillingOrderIdRoute = BestillingOrderIdRouteImport.update({
-  id: '/bestilling/$orderId',
-  path: '/bestilling/$orderId',
+const TopplisteRoute = TopplisteRouteImport.update({
+  id: '/toppliste',
+  path: '/toppliste',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminKunderRoute = AdminKunderRouteImport.update({
-  id: '/kunder',
-  path: '/kunder',
+const AdminEpostRoute = AdminEpostRouteImport.update({
+  id: '/epost',
+  path: '/epost',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminKaffeRoute = AdminKaffeRouteImport.update({
@@ -55,10 +51,20 @@ const AdminKaffeRoute = AdminKaffeRouteImport.update({
   path: '/kaffe',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminEpostRoute = AdminEpostRouteImport.update({
-  id: '/epost',
-  path: '/epost',
+const AdminKunderRoute = AdminKunderRouteImport.update({
+  id: '/kunder',
+  path: '/kunder',
   getParentRoute: () => AdminRoute,
+} as any)
+const AdminSynkRoute = AdminSynkRouteImport.update({
+  id: '/synk',
+  path: '/synk',
+  getParentRoute: () => AdminRoute,
+} as any)
+const BestillingOrderIdRoute = BestillingOrderIdRouteImport.update({
+  id: '/bestilling/$orderId',
+  path: '/bestilling/$orderId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRunderRoundIdRoute = AdminRunderRoundIdRouteImport.update({
   id: '/runder/$roundId',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/admin/epost': typeof AdminEpostRoute
   '/admin/kaffe': typeof AdminKaffeRoute
   '/admin/kunder': typeof AdminKunderRoute
+  '/admin/synk': typeof AdminSynkRoute
   '/bestilling/$orderId': typeof BestillingOrderIdRoute
   '/admin/runder/$roundId': typeof AdminRunderRoundIdRouteWithChildren
   '/admin/runder/$roundId/hentemodus': typeof AdminRunderRoundIdHentemodusRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/admin/epost'
     | '/admin/kaffe'
     | '/admin/kunder'
+    | '/admin/synk'
     | '/bestilling/$orderId'
     | '/admin/runder/$roundId'
     | '/admin/runder/$roundId/hentemodus'
@@ -158,18 +170,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/toppliste': {
-      id: '/toppliste'
-      path: '/toppliste'
-      fullPath: '/toppliste'
-      preLoaderRoute: typeof TopplisteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -179,25 +184,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/bestilling/$orderId': {
-      id: '/bestilling/$orderId'
-      path: '/bestilling/$orderId'
-      fullPath: '/bestilling/$orderId'
-      preLoaderRoute: typeof BestillingOrderIdRouteImport
+    '/toppliste': {
+      id: '/toppliste'
+      path: '/toppliste'
+      fullPath: '/toppliste'
+      preLoaderRoute: typeof TopplisteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/kunder': {
-      id: '/admin/kunder'
-      path: '/kunder'
-      fullPath: '/admin/kunder'
-      preLoaderRoute: typeof AdminKunderRouteImport
+    '/admin/epost': {
+      id: '/admin/epost'
+      path: '/epost'
+      fullPath: '/admin/epost'
+      preLoaderRoute: typeof AdminEpostRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/kaffe': {
@@ -207,12 +212,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminKaffeRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/epost': {
-      id: '/admin/epost'
-      path: '/epost'
-      fullPath: '/admin/epost'
-      preLoaderRoute: typeof AdminEpostRouteImport
+    '/admin/kunder': {
+      id: '/admin/kunder'
+      path: '/kunder'
+      fullPath: '/admin/kunder'
+      preLoaderRoute: typeof AdminKunderRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/admin/synk': {
+      id: '/admin/synk'
+      path: '/synk'
+      fullPath: '/admin/synk'
+      preLoaderRoute: typeof AdminSynkRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/bestilling/$orderId': {
+      id: '/bestilling/$orderId'
+      path: '/bestilling/$orderId'
+      fullPath: '/bestilling/$orderId'
+      preLoaderRoute: typeof BestillingOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/runder/$roundId': {
       id: '/admin/runder/$roundId'
@@ -246,6 +265,7 @@ interface AdminRouteChildren {
   AdminEpostRoute: typeof AdminEpostRoute
   AdminKaffeRoute: typeof AdminKaffeRoute
   AdminKunderRoute: typeof AdminKunderRoute
+  AdminSynkRoute: typeof AdminSynkRoute
   AdminRunderRoundIdRoute: typeof AdminRunderRoundIdRouteWithChildren
 }
 
@@ -253,6 +273,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminEpostRoute: AdminEpostRoute,
   AdminKaffeRoute: AdminKaffeRoute,
   AdminKunderRoute: AdminKunderRoute,
+  AdminSynkRoute: AdminSynkRoute,
   AdminRunderRoundIdRoute: AdminRunderRoundIdRouteWithChildren,
 }
 

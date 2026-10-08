@@ -175,6 +175,41 @@ describe("round opened email", () => {
   })
 })
 
+describe("round opened email with custom content", () => {
+  test("uses the edited subject and markdown body with merged name", () => {
+    const email = buildRoundOpenedEmail({
+      to: "kari@example.com",
+      customerName: "Kari",
+      orderPageUrl: "https://kaffe.example/",
+      supplierName: "Solberg & Hansen",
+      subject: "Kaffe!",
+      body: "Hallo {{navn}}!\n\nDenne gangen har vi **Tade**.",
+    })
+
+    expect(email.subject).toBe("Kaffe!")
+    expect(email.html).toContain("Hallo Kari!")
+    expect(email.html).toContain("<strong>Tade</strong>")
+    expect(email.html).not.toContain("Tiden er inne")
+    expect(email.html).toContain("Legg inn bestilling")
+    expect(email.text).toContain("Hallo Kari!")
+    expect(email.text).toContain("Legg inn bestilling: https://kaffe.example/")
+  })
+
+  test("falls back to the default subject and body when left blank", () => {
+    const email = buildRoundOpenedEmail({
+      to: "kari@example.com",
+      customerName: "Kari",
+      orderPageUrl: "https://kaffe.example/",
+      subject: "  ",
+      body: "",
+    })
+
+    expect(email.subject).toBe("Ny kafferunde er åpnet")
+    expect(email.html).toContain("Hei Kari,")
+    expect(email.html).toContain("Tiden er inne")
+  })
+})
+
 describe("broadcast emails", () => {
   test("replaces the name merge field per recipient", () => {
     expect(applyBroadcastMergeFields("Hei {{navn}}, velkommen", "Kari")).toBe(

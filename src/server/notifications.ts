@@ -1,5 +1,9 @@
 import { BRAND_NAME } from "@/components/brand"
 import { markdownToSafeHtml } from "@/lib/markdown"
+import {
+  ROUND_OPENED_DEFAULT_SUBJECT,
+  buildRoundOpenedDefaultBody,
+} from "@/lib/round-email"
 
 export type NotificationKind =
   | "order-confirmed"
@@ -71,16 +75,6 @@ export function buildLogoUrl(baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/filtermalerlosjen-logo.png`
 }
 
-function formatRoundCloseDate(value: Date | string | null | undefined) {
-  if (!value) return null
-  const date = value instanceof Date ? value : new Date(value)
-  if (!Number.isFinite(date.getTime())) return null
-  return new Intl.DateTimeFormat("nb-NO", {
-    dateStyle: "long",
-    timeStyle: "short",
-  }).format(date)
-}
-
 export function buildRoundOpenedEmail({
   to,
   customerName,
@@ -88,6 +82,8 @@ export function buildRoundOpenedEmail({
   logoUrl,
   supplierName,
   closesAt,
+  subject,
+  body,
 }: {
   to: string
   customerName: string
@@ -95,32 +91,24 @@ export function buildRoundOpenedEmail({
   logoUrl?: string | null
   supplierName?: string | null
   closesAt?: Date | string | null
+  subject?: string | null
+  body?: string | null
 }): NotificationEmail {
-  const supplier = supplierName?.trim()
-  const closeDate = formatRoundCloseDate(closesAt)
   const actionLabel = "Legg inn bestilling"
-
-  const introBody =
-    "Tiden er inne. Enten du allerede er tom for kaffe, eller sitter på et berg med bønner du vurderer å flippe på Finn for litt kjappe penger — en ny innkjøpsrunde er i gang."
-  const detailSentences = [
-    supplier ? `Vi handler fra ${supplier} denne runden.` : null,
-    closeDate ? `Runden stenger ${closeDate}.` : null,
-  ].filter((sentence): sentence is string => sentence !== null)
-  const detailBody = detailSentences.join(" ")
-
-  const paragraphs = [introBody, detailBody].filter(Boolean)
+  const markdownBody = body?.trim()
+    ? body
+    : buildRoundOpenedDefaultBody({ supplierName, closesAt })
+  const personalizedBody = applyBroadcastMergeFields(markdownBody, customerName)
+  const bodyHtml = markdownToSafeHtml(personalizedBody).replace(
+    /<p>/g,
+    '<p style="margin:0 0 20px;line-height:1.6;color:#000000;">'
+  )
 
   const html = `<!doctype html>
 <html lang="no">
   <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:32px 0;">
-      <p style="margin:0 0 16px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
-      ${paragraphs
-        .map(
-          (paragraph) =>
-            `<p style="margin:0 0 20px;line-height:1.6;color:#000000;">${escapeHtml(paragraph)}</p>`
-        )
-        .join("\n      ")}
+      ${bodyHtml}
       <p style="margin:0 0 32px;">
         <a href="${escapeAttribute(orderPageUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
       </p>
@@ -136,12 +124,11 @@ export function buildRoundOpenedEmail({
   </body>
 </html>`
 
-  const textParagraphs = paragraphs.join("\n\n")
-  const text = `Hei ${customerName},\n\n${textParagraphs}\n\n${actionLabel}: ${orderPageUrl}\n\n—\n${BRAND_NAME}`
+  const text = `${personalizedBody.trim()}\n\n${actionLabel}: ${orderPageUrl}\n\n—\n${BRAND_NAME}`
 
   return {
     to,
-    subject: "Ny kafferunde er åpnet",
+    subject: subject?.trim() || ROUND_OPENED_DEFAULT_SUBJECT,
     html,
     text,
   }

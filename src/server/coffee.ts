@@ -50,11 +50,28 @@ const updateCoffeeSchema = addCoffeeSchema.extend({
   id: uuidSchema,
   isActive: z.boolean(),
 })
+const syncCatalogSchema = z.object({
+  supplierId: uuidSchema,
+  deactivateIds: z.array(uuidSchema).default([]),
+  updates: z
+    .array(
+      z.object({
+        id: uuidSchema,
+        priceKr: z.number().int().min(1).optional(),
+        imageUrl: z.string().trim().url().optional(),
+        reactivate: z.boolean().optional().default(false),
+      })
+    )
+    .default([]),
+  creates: z.array(addCoffeeSchema.omit({ supplierId: true })).default([]),
+})
 const openRoundSchema = z.object({
   supplierId: uuidSchema,
   coffeeIds: z.array(uuidSchema).min(1),
   closesAt: z.string().datetime().nullable().optional(),
   notifyMembers: z.boolean().optional().default(false),
+  emailSubject: z.string().trim().max(200).nullable().optional(),
+  emailBody: z.string().max(10_000).nullable().optional(),
 })
 const closeRoundSchema = z.object({
   roundId: uuidSchema,
@@ -356,7 +373,8 @@ async function notifyRoundCustomers(
 
 async function notifyMembersRoundOpened(
   supplierName: string | null,
-  closesAt: Date | null
+  closesAt: Date | null,
+  content: { subject?: string | null; body?: string | null } = {}
 ) {
   const members = await getActiveCustomers()
   const baseUrl = getNotificationBaseUrl()
@@ -373,6 +391,8 @@ async function notifyMembersRoundOpened(
         logoUrl,
         supplierName,
         closesAt,
+        subject: content.subject,
+        body: content.body,
       })
     )
 
@@ -673,6 +693,55 @@ export const updateCoffee = createServerFn({ method: "POST" })
     return coffee
   })
 
+// Applies a reviewed catalog sync (e.g. from the Solberg & Hansen shop page).
+export const syncCatalog = createServerFn({ method: "POST" })
+  .inputValidator((input) => syncCatalogSchema.parse(input))
+  .handler(async ({ data }) => {
+    await requireAdmin()
+    const now = new Date()
+    const supplierCoffee = (id: string) =>
+      and(eq(coffees.id, id), eq(coffees.supplierId, data.supplierId))
+
+    if (data.deactivateIds.length > 0) {
+      await db
+        .update(coffees)
+        .set({ isActive: false, updatedAt: now })
+        .where(
+          and(
+            eq(coffees.supplierId, data.supplierId),
+            inArray(coffees.id, data.deactivateIds)
+          )
+        )
+    }
+
+    for (const update of data.updates) {
+      await db
+        .update(coffees)
+        .set({
+          ...(update.priceKr ? { priceKr: update.priceKr } : {}),
+          ...(update.imageUrl ? { imageUrl: update.imageUrl } : {}),
+          ...(update.reactivate ? { isActive: true } : {}),
+          updatedAt: now,
+        })
+        .where(supplierCoffee(update.id))
+    }
+
+    if (data.creates.length > 0) {
+      await db.insert(coffees).values(
+        data.creates.map((coffee) => ({
+          ...coffee,
+          supplierId: data.supplierId,
+        }))
+      )
+    }
+
+    return {
+      deactivated: data.deactivateIds.length,
+      updated: data.updates.length,
+      created: data.creates.length,
+    }
+  })
+
 export const archiveCoffee = createServerFn({ method: "POST" })
   .inputValidator((input) => archiveCoffeeSchema.parse(input))
   .handler(async ({ data }) => {
@@ -740,7 +809,11 @@ export const openRound = createServerFn({ method: "POST" })
         .from(suppliers)
         .where(eq(suppliers.id, data.supplierId))
         .limit(1)
-      await notifyMembersRoundOpened(supplierRows.at(0)?.name ?? null, closesAt)
+      await notifyMembersRoundOpened(
+        supplierRows.at(0)?.name ?? null,
+        closesAt,
+        { subject: data.emailSubject, body: data.emailBody }
+      )
     }
 
     return round
