@@ -11,6 +11,7 @@ import {
   buildRoundNotificationEmails,
   buildRoundOpenedEmail,
   getNotificationDeliveryStatus,
+  redirectNotificationEmail,
   sendNotificationEmail,
 } from "./notifications"
 
@@ -38,6 +39,43 @@ describe("notification templates", () => {
     expect(email.text).toContain("https://kaffe.example/bestilling/order-1")
   })
 
+  test.each(["order-confirmed", "payment-ready", "pickup-ready"] as const)(
+    "%s email links to the order status page as button and plain link",
+    (kind) => {
+      const orderUrl = "https://kaffe.example/bestilling/order-1"
+      const email = buildNotificationEmail({
+        kind,
+        to: "kunde@example.com",
+        customerName: "Kari",
+        orderUrl,
+        totalKr: 100,
+        paid: false,
+        collected: false,
+      })
+
+      expect(email.html).toContain("Se status for bestillingen")
+      expect(email.html).toContain(
+        `Statusside: <a href="${orderUrl}" style="color:#000000;word-break:break-all;">${orderUrl}</a>`
+      )
+      expect(email.text).toContain(`Se status for bestillingen: ${orderUrl}`)
+    }
+  )
+
+  test("redirects an email to a test address and keeps the original recipient", () => {
+    const email = buildNotificationEmail({
+      kind: "order-confirmed",
+      to: "kunde@example.com",
+      customerName: "Kari",
+      orderUrl: "https://kaffe.example/bestilling/order-1",
+    })
+    const redirected = redirectNotificationEmail(email, "admin@example.com")
+
+    expect(redirected.to).toBe("admin@example.com")
+    expect(redirected.subject).toBe(email.subject)
+    expect(redirected.html).toContain("Original mottaker: kunde@example.com")
+    expect(redirected.text).toContain("Original mottaker: kunde@example.com")
+  })
+
   test("builds a login code email without an action link", () => {
     const email = buildLoginCodeEmail({
       to: "kunde@example.com",
@@ -52,7 +90,7 @@ describe("notification templates", () => {
     expect(email.html).toContain("one-time code")
     expect(email.html).not.toContain("<a ")
     expect(email.text).toContain("123456")
-    expect(email.text).not.toContain("Se bestilling")
+    expect(email.text).not.toContain("Se status for bestillingen")
   })
 
   test("filters empty recipient emails from round notifications", () => {

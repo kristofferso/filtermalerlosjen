@@ -63,6 +63,8 @@ type SendNotificationOptions = {
   ) => Promise<void>
 }
 
+export const ORDER_STATUS_ACTION_LABEL = "Se status for bestillingen"
+
 export function buildOrderUrl(orderId: string, baseUrl: string) {
   return `${baseUrl.replace(/\/+$/, "")}/bestilling/${orderId}`
 }
@@ -174,7 +176,7 @@ export function buildNotificationEmail(
   input: NotificationInput
 ): NotificationEmail {
   const content = getNotificationContent(input)
-  const actionLabel = "Se bestilling"
+  const actionLabel = ORDER_STATUS_ACTION_LABEL
 
   return {
     to: input.to,
@@ -440,10 +442,18 @@ export function applyNotificationRecipientWhitelist(
     return email
   }
 
-  const redirectedTo = allowedRecipients[0]
+  return redirectNotificationEmail(email, allowedRecipients[0])
+}
+
+// Delivers an email to another address while keeping the original recipient
+// visible at the bottom, so test sends and sandboxed sends stay traceable.
+export function redirectNotificationEmail(
+  email: NotificationEmail,
+  to: string
+): NotificationEmail {
   return {
     ...email,
-    to: redirectedTo,
+    to,
     html: email.html.replace(
       "</body>",
       `<p style="max-width:560px;margin:16px auto 0;padding:0 20px;color:#000000;font-size:12px;">Original mottaker: ${escapeHtml(email.to)}</p></body>`
@@ -504,7 +514,7 @@ function getNotificationContent(input: NotificationInput) {
     return {
       subject: "Bestillingen din er mottatt",
       title: "Bestillingen din er mottatt",
-      body: "Betalingsinfo kommer når runden stenger. Du kan åpne bestillingen din for status underveis.",
+      body: "Betalingsinfo kommer når runden stenger. Følg med på statussiden til bestillingen din underveis.",
     }
   }
 
@@ -512,7 +522,7 @@ function getNotificationContent(input: NotificationInput) {
     return {
       subject: "Kaffeoppgjøret er klart",
       title: "Kaffeoppgjøret er klart",
-      body: `Din andel er ${input.totalKr} kr. Åpne bestillingen for betalingslenke og detaljer.`,
+      body: `Din andel er ${input.totalKr} kr. Statussiden til bestillingen har betalingslenke og detaljer.`,
     }
   }
 
@@ -521,7 +531,7 @@ function getNotificationContent(input: NotificationInput) {
     title: "Kaffen er klar for henting",
     body: `${input.paid ? "Betalt" : "Ikke betalt"}. ${
       input.collected ? "Markert som hentet" : "Ikke markert som hentet"
-    }. Åpne bestillingen for status og detaljer.`,
+    }. Statussiden til bestillingen viser hentetider og detaljer.`,
   }
 }
 
@@ -541,9 +551,10 @@ function renderHtml({
   const action =
     orderUrl && actionLabel
       ? `
-      <p style="margin:0;">
+      <p style="margin:0 0 16px;">
         <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
-      </p>`
+      </p>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:#000000;">Statusside: <a href="${escapeAttribute(orderUrl)}" style="color:#000000;word-break:break-all;">${escapeHtml(orderUrl)}</a></p>`
       : ""
 
   return `<!doctype html>
@@ -564,7 +575,7 @@ function renderText({
   title,
   body,
   orderUrl,
-  actionLabel = "Se bestilling",
+  actionLabel = ORDER_STATUS_ACTION_LABEL,
 }: {
   customerName: string
   title: string

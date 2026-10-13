@@ -4,14 +4,16 @@ import { z } from "zod"
 import { getAuthenticatedCustomerId } from "./auth.server"
 import { getCurrentUser, requireAdmin } from "./session"
 import {
-  buildLogoUrl,
   buildNotificationEmail,
-  buildOrderPageUrl,
   buildOrderUrl,
-  buildRoundNotificationEmails,
-  buildRoundOpenedEmail,
   sendNotificationEmail,
 } from "./notifications"
+import { getOrderSummaries } from "./round-data.server"
+import {
+  buildRoundDispatchEmails,
+  getNotificationBaseUrl,
+} from "./round-dispatch.server"
+import type { RoundOpenedContent } from "./round-dispatch.server"
 import type { LeaderboardInput, LeaderboardResult } from "@/lib/leaderboard"
 import { db } from "@/db/client"
 import { buildLeaderboard } from "@/lib/leaderboard"
@@ -173,81 +175,6 @@ async function getSelectedCustomer() {
   return customerRows.at(0) ?? null
 }
 
-async function getOrderSummaries(roundIds: Array<string>) {
-  if (roundIds.length === 0) return []
-
-  const rows = await db
-    .select({
-      order: orders,
-      item: orderItems,
-      roundCoffee: roundCoffees,
-    })
-    .from(orders)
-    .leftJoin(orderItems, eq(orderItems.orderId, orders.id))
-    .leftJoin(roundCoffees, eq(roundCoffees.id, orderItems.roundCoffeeId))
-    .where(inArray(orders.roundId, roundIds))
-    .orderBy(desc(orders.createdAt))
-
-  const byOrder = new Map<
-    string,
-    {
-      id: string
-      roundId: string
-      customerId: string | null
-      customerName: string
-      customerPhone: string | null
-      customerEmail: string | null
-      paid: boolean
-      collected: boolean
-      pickupSlotId: string
-      pickupSlotLabel: string
-      pickupStartsAt: Date | null
-      pickupEndsAt: Date | null
-      createdAt: Date
-      items: Array<{
-        name: string
-        imageUrl: string
-        quantity: number
-        priceKr: number
-      }>
-    }
-  >()
-
-  for (const row of rows) {
-    let orderSummary = byOrder.get(row.order.id)
-    if (!orderSummary) {
-      orderSummary = {
-        id: row.order.id,
-        roundId: row.order.roundId,
-        customerId: row.order.customerId,
-        customerName: row.order.customerName,
-        customerPhone: row.order.customerPhone,
-        customerEmail: row.order.customerEmail,
-        paid: row.order.paid,
-        collected: row.order.collected,
-        pickupSlotId: row.order.pickupSlotId,
-        pickupSlotLabel: row.order.pickupSlotLabel,
-        pickupStartsAt: row.order.pickupStartsAt,
-        pickupEndsAt: row.order.pickupEndsAt,
-        createdAt: row.order.createdAt,
-        items: [],
-      }
-      byOrder.set(row.order.id, orderSummary)
-    }
-
-    if (row.item && row.roundCoffee) {
-      orderSummary.items.push({
-        name: row.roundCoffee.nameSnapshot,
-        imageUrl: row.roundCoffee.imageUrlSnapshot,
-        quantity: row.item.quantity,
-        priceKr: row.item.priceKrSnapshot,
-      })
-    }
-  }
-
-  return Array.from(byOrder.values())
-}
-
 async function getCompletedLeaderboardResult(): Promise<LeaderboardResult> {
   const completedRounds = await db
     .select()
@@ -334,10 +261,6 @@ async function getSupplierBoardData() {
   })
 }
 
-function getNotificationBaseUrl() {
-  return process.env.APP_URL?.trim() || "http://localhost:3000"
-}
-
 async function sendCustomerNotification(
   email: ReturnType<typeof buildNotificationEmail>
 ) {
@@ -348,54 +271,12 @@ async function sendCustomerNotification(
   }
 }
 
-async function notifyRoundCustomers(
-  kind: "payment-ready" | "pickup-ready",
+async function notifyRound(
+  kind: "round-opened" | "payment-ready" | "pickup-ready",
   roundId: string,
-  shippingKr: number
+  content?: RoundOpenedContent
 ) {
-  const orderSummaries = await getOrderSummaries([roundId])
-  const totals = calculateRoundTotals({ shippingKr, orders: orderSummaries })
-  const orderSummariesById = new Map(
-    orderSummaries.map((order) => [order.id, order])
-  )
-  const emails = buildRoundNotificationEmails({
-    kind,
-    baseUrl: getNotificationBaseUrl(),
-    orders: totals.map((total) => ({
-      ...total,
-      customerEmail:
-        orderSummariesById.get(total.orderId)?.customerEmail?.trim() || null,
-    })),
-  })
-
-  await Promise.all(emails.map((email) => sendCustomerNotification(email)))
-}
-
-async function notifyMembersRoundOpened(
-  supplierName: string | null,
-  closesAt: Date | null,
-  content: { subject?: string | null; body?: string | null } = {}
-) {
-  const members = await getActiveCustomers()
-  const baseUrl = getNotificationBaseUrl()
-  const orderPageUrl = buildOrderPageUrl(baseUrl)
-  const logoUrl = buildLogoUrl(baseUrl)
-
-  const emails = members
-    .filter((member) => member.email.trim().length > 0)
-    .map((member) =>
-      buildRoundOpenedEmail({
-        to: member.email.trim(),
-        customerName: member.name,
-        orderPageUrl,
-        logoUrl,
-        supplierName,
-        closesAt,
-        subject: content.subject,
-        body: content.body,
-      })
-    )
-
+  const emails = await buildRoundDispatchEmails({ kind, roundId, content })
   await Promise.all(emails.map((email) => sendCustomerNotification(email)))
 }
 
@@ -804,16 +685,10 @@ export const openRound = createServerFn({ method: "POST" })
     await db.delete(supplierVotes)
 
     if (data.notifyMembers) {
-      const supplierRows = await db
-        .select({ name: suppliers.name })
-        .from(suppliers)
-        .where(eq(suppliers.id, data.supplierId))
-        .limit(1)
-      await notifyMembersRoundOpened(
-        supplierRows.at(0)?.name ?? null,
-        closesAt,
-        { subject: data.emailSubject, body: data.emailBody }
-      )
+      await notifyRound("round-opened", round.id, {
+        subject: data.emailSubject,
+        body: data.emailBody,
+      })
     }
 
     return round
@@ -869,7 +744,7 @@ export const closeRound = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Open round not found")
-    await notifyRoundCustomers("payment-ready", round.id, round.shippingKr)
+    await notifyRound("payment-ready", round.id)
     return round
   })
 
@@ -903,7 +778,7 @@ export const markRoundReadyForPickup = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Closed round not found")
-    await notifyRoundCustomers("pickup-ready", round.id, round.shippingKr)
+    await notifyRound("pickup-ready", round.id)
     return round
   })
 
