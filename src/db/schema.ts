@@ -70,6 +70,9 @@ export const rounds = pgTable(
     openedAt: timestamp("opened_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    // When the "Oppgjør klart" email last went out. Sent manually once
+    // shipping is known, not when the round closes.
+    paymentNotifiedAt: timestamp("payment_notified_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => ({

@@ -187,7 +187,7 @@ export const sendRoundDispatch = createServerFn({ method: "POST" })
       selectedKeys.has(email.key)
     )
 
-    return sendEmailBatch(
+    const result = await sendEmailBatch(
       emails.map((email) => ({
         id: email.key,
         name: email.recipientName,
@@ -196,6 +196,15 @@ export const sendRoundDispatch = createServerFn({ method: "POST" })
           : email,
       }))
     )
+
+    if (data.kind === "payment-ready" && !data.testTo && result.sentCount > 0) {
+      await db
+        .update(rounds)
+        .set({ paymentNotifiedAt: new Date(), updatedAt: new Date() })
+        .where(eq(rounds.id, data.roundId))
+    }
+
+    return result
   })
 
 async function sendEmailBatch(

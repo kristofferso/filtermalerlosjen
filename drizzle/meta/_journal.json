@@ -71,6 +71,13 @@
       "when": 1781297077977,
       "tag": "0009_faithful_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791919012774,
+      "tag": "0010_round_payment_notified_at",
+      "breakpoints": true
     }
   ]
 }

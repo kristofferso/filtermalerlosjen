@@ -9,6 +9,7 @@ type AdminActionRound = {
   closesAt: Date | string | null
   shippingKr: number
   pickupInstructions: string
+  paymentNotifiedAt?: Date | string | null
   orders: Array<Pick<AdminRoundOrder, "paid" | "collected" | "items">>
 }
 
@@ -195,6 +196,18 @@ export function getAdminActionQueue({
   }
 
   const settlementRound = latestClosedRound
+  if (
+    settlementRound &&
+    settlementRound.orders.length > 0 &&
+    !settlementRound.paymentNotifiedAt
+  ) {
+    queue.push({
+      label: "Oppgjør ikke sendt",
+      value: "Send fra runden når frakt er lagt inn",
+      tone: "attention",
+    })
+  }
+
   if (settlementRound) {
     const unpaidCount = settlementRound.orders.filter(
       (order) => !order.paid

@@ -84,6 +84,7 @@ const updateRoundShippingSchema = z.object({
   shippingKr: z.number().int().min(0),
 })
 const markRoundReadySchema = z.object({ roundId: uuidSchema })
+const sendRoundPaymentNoticeSchema = z.object({ roundId: uuidSchema })
 const updateRoundDetailsSchema = z.object({
   roundId: uuidSchema,
   closesAt: z.string().datetime().nullable().optional(),
@@ -278,6 +279,7 @@ async function notifyRound(
 ) {
   const emails = await buildRoundDispatchEmails({ kind, roundId, content })
   await Promise.all(emails.map((email) => sendCustomerNotification(email)))
+  return emails.length
 }
 
 async function getLatestCustomerStatusOrder(customerId: string) {
@@ -744,8 +746,33 @@ export const closeRound = createServerFn({ method: "POST" })
       .returning()
     const round = updatedRoundRows.at(0)
     if (!round) throw new Error("Open round not found")
-    await notifyRound("payment-ready", round.id)
+    // The payment email waits for shipping; see sendRoundPaymentNotice.
     return round
+  })
+
+export const sendRoundPaymentNotice = createServerFn({ method: "POST" })
+  .inputValidator((input) => sendRoundPaymentNoticeSchema.parse(input))
+  .handler(async ({ data }) => {
+    await requireAdmin()
+    const roundRows = await db
+      .select({ id: rounds.id })
+      .from(rounds)
+      .where(
+        and(
+          eq(rounds.id, data.roundId),
+          inArray(rounds.status, ["closed", "ready"])
+        )
+      )
+      .limit(1)
+    if (!roundRows.at(0)) throw new Error("Closed round not found")
+
+    const recipientCount = await notifyRound("payment-ready", data.roundId)
+    const [round] = await db
+      .update(rounds)
+      .set({ paymentNotifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(rounds.id, data.roundId))
+      .returning()
+    return { recipientCount, paymentNotifiedAt: round.paymentNotifiedAt }
   })
 
 export const updateRoundShipping = createServerFn({ method: "POST" })

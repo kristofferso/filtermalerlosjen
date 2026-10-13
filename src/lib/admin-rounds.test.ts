@@ -248,6 +248,7 @@ describe("getAdminActionQueue", () => {
           closesAt: null,
           shippingKr: 79,
           pickupInstructions: "Hentes hos K.",
+          paymentNotifiedAt: new Date("2026-05-06T10:00:00Z"),
           orders: [
             { paid: false, collected: false, items: [] },
             { paid: true, collected: false, items: [] },
@@ -260,5 +261,32 @@ describe("getAdminActionQueue", () => {
       { label: "Ikke betalt", value: "1 ordre", tone: "attention" },
       { label: "Ikke hentet", value: "2 ordre", tone: "attention" },
     ])
+  })
+
+  test("flags a closed round whose payment email has not been sent", () => {
+    const items = getAdminActionQueue({
+      openRound: null,
+      closedRounds: [
+        {
+          status: "closed",
+          closesAt: null,
+          shippingKr: 0,
+          pickupInstructions: "Hentes hos K.",
+          paymentNotifiedAt: null,
+          orders: [{ paid: false, collected: false, items: [] }],
+        },
+      ],
+    })
+
+    expect(items).toContainEqual({
+      label: "Frakt mangler",
+      value: "Sett frakt på siste oppgjør",
+      tone: "attention",
+    })
+    expect(items).toContainEqual({
+      label: "Oppgjør ikke sendt",
+      value: "Send fra runden når frakt er lagt inn",
+      tone: "attention",
+    })
   })
 })

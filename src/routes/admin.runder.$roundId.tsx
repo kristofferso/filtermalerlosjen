@@ -5,7 +5,8 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router"
-import { ChevronDown } from "lucide-react"
+import { useState } from "react"
+import { AlertTriangle, ChevronDown, Mail } from "lucide-react"
 import {
   AdminAccessNotice,
   AdminHeader,
@@ -27,7 +28,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getAdminRoundDetail, markRoundReadyForPickup } from "@/server/coffee"
+import { formatKr } from "@/lib/money"
+import {
+  getAdminRoundDetail,
+  markRoundReadyForPickup,
+  sendRoundPaymentNotice,
+} from "@/server/coffee"
 
 type AdminRoundDetailData = Extract<
   Awaited<ReturnType<typeof getAdminRoundDetail>>,
@@ -81,6 +87,87 @@ function PickupModeTopAction({ round }: { round: AdminRoundDetailRound }) {
   )
 }
 
+function PaymentNoticePanel({
+  round,
+  refresh,
+}: {
+  round: AdminRoundDetailRound
+  refresh: () => Promise<void>
+}) {
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const recipientCount = round.orders.filter((order) =>
+    order.customerEmail?.trim()
+  ).length
+  const missingShipping = round.shippingKr === 0
+  const sentAt = round.paymentNotifiedAt
+    ? new Intl.DateTimeFormat("nb-NO", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Europe/Oslo",
+      }).format(new Date(round.paymentNotifiedAt))
+    : null
+
+  async function handleSend() {
+    const question = [
+      sentAt
+        ? `Oppgjøret ble sendt ${sentAt}. Sende på nytt til ${recipientCount}?`
+        : `Sende oppgjør til ${recipientCount}?`,
+      missingShipping
+        ? "Frakt er 0 kr, så beløpene blir uten frakt."
+        : `Frakt: ${formatKr(round.shippingKr)}.`,
+    ].join("\n\n")
+    if (!window.confirm(question)) return
+
+    setSending(true)
+    setError(null)
+    try {
+      await sendRoundPaymentNotice({ data: { roundId: round.id } })
+      await refresh()
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Ukjent feil")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">Oppgjør på e-post</p>
+          <p className="text-sm text-muted-foreground">
+            {sentAt
+              ? `Sendt ${sentAt}.`
+              : "Ikke sendt. Legg inn frakt under «Rediger runde» først."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={sentAt ? "outline" : "default"}
+          onClick={handleSend}
+          loading={sending}
+          disabled={recipientCount === 0}
+        >
+          <Mail className="size-4" aria-hidden="true" />
+          {sentAt
+            ? "Send oppgjør på nytt"
+            : `Send oppgjør til ${recipientCount}`}
+        </Button>
+      </div>
+      {missingShipping ? (
+        <p className="flex items-start gap-2 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          Frakt er 0 kr. Beløpene i e-posten blir uten fraktandel.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-destructive">Feil ved sending: {error}</p>
+      ) : null}
+    </div>
+  )
+}
+
 function AdminRoundDetailPage() {
   const data = Route.useLoaderData()
   const params = Route.useParams()
@@ -93,9 +180,7 @@ function AdminRoundDetailPage() {
     <main className="min-h-svh px-4 py-5 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl space-y-5">
         <AdminHeader />
-        {!data.unlocked ? (
-          <AdminAccessNotice />
-        ) : null}
+        {!data.unlocked ? <AdminAccessNotice /> : null}
         {data.unlocked && !data.round ? (
           <section className="rounded-lg border border-(--ledger-line) bg-card p-5">
             <h2 className="text-xl">Runde finnes ikke</h2>
@@ -120,7 +205,9 @@ function AdminRoundDetailPage() {
                   <h1 className="mt-1 text-2xl tracking-tight">
                     {data.round.supplier?.name ?? "Ukjent leverandør"}
                     {" –  "}
-                    {data.round.closedAt ? ` ${new Date(data.round.closedAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}` : ""}
+                    {data.round.closedAt
+                      ? ` ${new Date(data.round.closedAt).toLocaleDateString("nb-NO", { dateStyle: "medium" })}`
+                      : ""}
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Alle detaljer og ordre for denne runden.
@@ -161,7 +248,11 @@ function AdminRoundDetailPage() {
                   </Button>
                 </div>
               </div>
-              <div className="p-4 sm:p-5">
+              <div className="space-y-4 p-4 sm:p-5">
+                <PaymentNoticePanel
+                  round={data.round}
+                  refresh={() => router.invalidate()}
+                />
                 <ClosedRoundSummary
                   round={data.round}
                   refresh={() => router.invalidate()}
