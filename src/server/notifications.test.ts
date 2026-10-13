@@ -76,6 +76,23 @@ describe("notification templates", () => {
     expect(redirected.text).toContain("Original mottaker: kunde@example.com")
   })
 
+  test("opts out of dark-mode recoloring and renders a table button", () => {
+    const email = buildNotificationEmail({
+      kind: "payment-ready",
+      to: "kunde@example.com",
+      customerName: "Kari",
+      orderUrl: "https://kaffe.example/bestilling/order-1",
+      totalKr: 456,
+    })
+
+    expect(email.html).toContain(
+      '<meta name="color-scheme" content="light only" />'
+    )
+    expect(email.html).toContain('bgcolor="#ffffff"')
+    expect(email.html).toContain('class="email-button-cell" bgcolor="#000000"')
+    expect(email.html).toContain('class="email-button-link"')
+  })
+
   test("builds a login code email without an action link", () => {
     const email = buildLoginCodeEmail({
       to: "kunde@example.com",

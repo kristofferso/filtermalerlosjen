@@ -106,14 +106,10 @@ export function buildRoundOpenedEmail({
     '<p style="margin:0 0 20px;line-height:1.6;color:#000000;">'
   )
 
-  const html = `<!doctype html>
-<html lang="no">
-  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 0;">
+  const html = renderEmailDocument(
+    `
       ${bodyHtml}
-      <p style="margin:0 0 32px;">
-        <a href="${escapeAttribute(orderPageUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
-      </p>
+      <div style="margin:0 0 32px;">${renderActionButton(orderPageUrl, actionLabel)}</div>
       <div style="border-top:1px solid #000000;padding-top:16px;text-align:center;">
         <p style="margin:0 0 10px;line-height:1.4;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
         ${
@@ -121,10 +117,9 @@ export function buildRoundOpenedEmail({
             ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(BRAND_NAME)}" width="47" style="display:block;width:47px;max-width:20%;height:auto;margin:0 auto;" />`
             : ""
         }
-      </div>
-    </div>
-  </body>
-</html>`
+      </div>`,
+    { padding: "32px 0" }
+  )
 
   const text = `${personalizedBody.trim()}\n\n${actionLabel}: ${orderPageUrl}\n\n—\n${BRAND_NAME}`
 
@@ -148,19 +143,15 @@ export function buildLoginCodeEmail({
   // Formatting tuned for iOS/macOS one-time-code autofill: the code appears in
   // the subject and as a standalone token right after the keyword "code", and
   // it is the only digit run in the message.
-  const html = `<!doctype html>
-<html lang="no">
-  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+  const html = renderEmailDocument(
+    `
       <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
       <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">Innloggingskode</h1>
       <p style="margin:0 0 8px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
       <p style="margin:0 0 12px;line-height:1.6;color:#000000;">Din innloggingskode (one-time code) er:</p>
       <p style="margin:0 0 16px;font-family:'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:0.18em;color:#000000;">${escapeHtml(code)}</p>
-      <p style="margin:0;line-height:1.6;color:#000000;">Koden er gyldig i ti minutter. Hvis du ikke ba om dette kan du se bort fra denne e-posten.</p>
-    </div>
-  </body>
-</html>`
+      <p style="margin:0;line-height:1.6;color:#000000;">Koden er gyldig i ti minutter. Hvis du ikke ba om dette kan du se bort fra denne e-posten.</p>`
+  )
 
   const text = `${BRAND_NAME}\n\nInnloggingskode\n\nHei ${customerName},\n\nDin innloggingskode (one-time code) er: ${code}\n\nKoden er gyldig i ti minutter.`
 
@@ -389,16 +380,12 @@ export function buildBroadcastEmail({
   const personalizedBody = applyBroadcastMergeFields(body, customerName)
   const bodyHtml = markdownToSafeHtml(personalizedBody)
 
-  const html = `<!doctype html>
-<html lang="no">
-  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+  const html = renderEmailDocument(
+    `
       <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
       <h1 style="margin:0 0 20px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">${escapeHtml(subject)}</h1>
-      <div style="line-height:1.6;color:#000000;">${bodyHtml}</div>
-    </div>
-  </body>
-</html>`
+      <div style="line-height:1.6;color:#000000;">${bodyHtml}</div>`
+  )
 
   const text = `${BRAND_NAME}\n\n${subject}\n\n${personalizedBody}`
 
@@ -551,23 +538,17 @@ function renderHtml({
   const action =
     orderUrl && actionLabel
       ? `
-      <p style="margin:0 0 16px;">
-        <a href="${escapeAttribute(orderUrl)}" style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">${escapeHtml(actionLabel)}</a>
-      </p>
+      <div style="margin:0 0 16px;">${renderActionButton(orderUrl, actionLabel)}</div>
       <p style="margin:0;font-size:13px;line-height:1.5;color:#000000;">Statusside: <a href="${escapeAttribute(orderUrl)}" style="color:#000000;word-break:break-all;">${escapeHtml(orderUrl)}</a></p>`
       : ""
 
-  return `<!doctype html>
-<html lang="no">
-  <body style="margin:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+  return renderEmailDocument(
+    `
       <p style="margin:0 0 18px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#000000;">${escapeHtml(BRAND_NAME)}</p>
       <h1 style="margin:0 0 16px;font-size:28px;line-height:1.15;font-weight:700;color:#000000;">${escapeHtml(title)}</h1>
       <p style="margin:0 0 16px;line-height:1.6;color:#000000;">Hei ${escapeHtml(customerName)},</p>
-      <p style="margin:0 0 24px;line-height:1.6;color:#000000;">${escapeHtml(body)}</p>${action}
-    </div>
-  </body>
-</html>`
+      <p style="margin:0 0 24px;line-height:1.6;color:#000000;">${escapeHtml(body)}</p>${action}`
+  )
 }
 
 function renderText({
@@ -585,6 +566,52 @@ function renderText({
 }) {
   const action = orderUrl ? `\n\n${actionLabel}: ${orderUrl}` : ""
   return `${BRAND_NAME}\n\n${title}\n\nHei ${customerName},\n\n${body}${action}`
+}
+
+// Mail clients in dark mode (Apple Mail, iCloud, Outlook) recolor emails that
+// don't opt out, which can leave the black button black-on-black. Declare the
+// email light-only, and paint the white canvas on a wrapper table as well,
+// since webmail strips styles from <body>.
+function renderEmailDocument(
+  content: string,
+  { padding = "32px 20px" }: { padding?: string } = {}
+) {
+  return `<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light only" />
+    <meta name="supported-color-schemes" content="light only" />
+    <style>
+      :root { color-scheme: light only; supported-color-schemes: light only; }
+      [data-ogsc] .email-button-link { color: #ffffff !important; }
+      [data-ogsb] .email-button-cell { background-color: #000000 !important; }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#ffffff;color:#000000;font-family:Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background:#ffffff;color:#000000;">
+      <tr>
+        <td>
+          <div style="max-width:560px;margin:0 auto;padding:${padding};">${content}
+          </div>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+// Table-based so the black background survives clients that drop padding or
+// background on inline links.
+function renderActionButton(url: string, label: string) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+          <tr>
+            <td class="email-button-cell" bgcolor="#000000" style="background:#000000;border:2px solid #000000;border-radius:8px;">
+              <a class="email-button-link" href="${escapeAttribute(url)}" style="display:inline-block;padding:12px 18px;border-radius:8px;color:#ffffff;text-decoration:none;font-weight:700;font-family:Arial,sans-serif;">${escapeHtml(label)}</a>
+            </td>
+          </tr>
+        </table>`
 }
 
 function escapeHtml(value: string) {
