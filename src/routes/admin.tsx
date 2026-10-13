@@ -971,8 +971,8 @@ export function OpenRoundSection({
         <EditRoundForm round={round} mode="open" refresh={refresh} />
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
           <p className="text-sm text-muted-foreground">
-            Lukk når ekstern bestilling er sendt. Frakt kan settes senere i
-            oppgjør.
+            Lukk når ekstern bestilling er sendt. Oppgjøret sendes ikke ennå:
+            legg inn frakt på runden og trykk «Send oppgjør» der.
           </p>
           <Button type="button" onClick={handleClose}>
             Lukk runde

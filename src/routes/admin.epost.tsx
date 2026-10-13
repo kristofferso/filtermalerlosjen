@@ -1,20 +1,30 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
   Check,
   ChevronDown,
   Circle,
   Mail,
+  RefreshCw,
+  Repeat,
   Send,
 } from "lucide-react"
 import { createFileRoute } from "@tanstack/react-router"
 import { AdminAccessNotice, AdminHeader } from "./admin"
+import type { RoundDispatchKind } from "@/lib/round-dispatch"
 import { Button } from "@/components/ui/button"
 import {
   getEmailAdminData,
+  previewRoundDispatch,
   sendBroadcastEmail,
+  sendRoundDispatch,
   sendTemplateTestEmail,
 } from "@/server/email-admin"
+import {
+  ROUND_DISPATCH_KINDS,
+  ROUND_DISPATCH_META,
+  isRoundDispatchAvailable,
+} from "@/lib/round-dispatch"
 
 export const Route = createFileRoute("/admin/epost")({
   loader: () => getEmailAdminData(),
@@ -27,6 +37,13 @@ type EmailData = Extract<
 >
 type Template = EmailData["templates"][number]
 type Member = EmailData["members"][number]
+type RoundOption = EmailData["rounds"][number]
+type SendResult = Awaited<ReturnType<typeof sendBroadcastEmail>>
+type SendStatus =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "done"; result: SendResult }
+  | { kind: "error"; message: string }
 
 function AdminEmailPage() {
   const data = Route.useLoaderData()
@@ -51,22 +68,31 @@ function EmailAdminView({ data }: { data: EmailData }) {
         </p>
         <h2 className="mt-1 text-xl tracking-tight">E-post</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Send testeposter av gjeldende maler, og send enkeltmeldinger til
-          medlemmer.
+          Send testeposter av gjeldende maler, repliser utsendelser fra en
+          runde, og send enkeltmeldinger til medlemmer.
         </p>
       </section>
 
-      <DeliveryStatusCard delivery={data.delivery} />
+      <DeliveryStatusCard delivery={data.delivery} baseUrl={data.baseUrl} />
       <TemplatesSection
         templates={data.templates}
         adminEmail={data.adminEmail}
       />
+      <RoundDispatchSection rounds={data.rounds} adminEmail={data.adminEmail} />
       <BroadcastSection members={data.members} />
     </div>
   )
 }
 
-function DeliveryStatusCard({ delivery }: { delivery: EmailData["delivery"] }) {
+function DeliveryStatusCard({
+  delivery,
+  baseUrl,
+}: {
+  delivery: EmailData["delivery"]
+  baseUrl: string
+}) {
+  const linksPointToLocalhost = /\/\/(localhost|127\.0\.0\.1)\b/.test(baseUrl)
+
   return (
     <section className="rounded-lg border border-(--ledger-line) bg-card">
       <div className="border-b border-border p-4 sm:p-5">
@@ -96,6 +122,21 @@ function DeliveryStatusCard({ delivery }: { delivery: EmailData["delivery"] }) {
             </p>
           </div>
         )}
+
+        <div className="rounded-md border border-border bg-muted/30 p-3">
+          <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
+            Lenker i e-post (APP_URL)
+          </p>
+          <p className="mt-2 font-mono text-sm break-all">{baseUrl}</p>
+          {linksPointToLocalhost ? (
+            <p className="mt-2 flex items-start gap-2 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              Lenkene til statussiden peker til localhost og vil ikke virke for
+              medlemmene. Sett <code className="font-mono">APP_URL</code> til
+              den offentlige adressen.
+            </p>
+          ) : null}
+        </div>
 
         <div className="rounded-md border border-border bg-muted/30 p-3">
           <p className="font-mono text-[0.62rem] tracking-[0.14em] text-muted-foreground uppercase">
@@ -342,6 +383,407 @@ function TestSendFeedback({
   return <p className="text-sm text-foreground">Test sendt.</p>
 }
 
+const ROUND_STATUS_LABELS: Record<RoundOption["status"], string> = {
+  draft: "Utkast",
+  open: "Åpen",
+  closed: "Stengt",
+  ready: "Klar for henting",
+}
+
+function formatRoundOption(round: RoundOption) {
+  const date = round.openedAt
+    ? new Intl.DateTimeFormat("nb-NO", {
+        dateStyle: "medium",
+        timeZone: "Europe/Oslo",
+      }).format(new Date(round.openedAt))
+    : "uten dato"
+  return `${round.supplierName} · åpnet ${date} · ${ROUND_STATUS_LABELS[round.status]} · ${round.orderCount} bestillinger`
+}
+
+// The step the round most recently passed is the dispatch most likely to
+// need a replay.
+function latestAvailableKind(round: RoundOption | undefined) {
+  if (!round) return ROUND_DISPATCH_KINDS[0]
+  return (
+    ROUND_DISPATCH_KINDS.filter((kind) =>
+      isRoundDispatchAvailable(kind, round.status)
+    ).at(-1) ?? ROUND_DISPATCH_KINDS[0]
+  )
+}
+
+type DispatchPreview = Awaited<ReturnType<typeof previewRoundDispatch>>
+
+function RoundDispatchSection({
+  rounds,
+  adminEmail,
+}: {
+  rounds: Array<RoundOption>
+  adminEmail: string
+}) {
+  const [roundId, setRoundId] = useState(rounds[0]?.id ?? "")
+  const round = rounds.find((entry) => entry.id === roundId)
+  const [kind, setKind] = useState<RoundDispatchKind>(() =>
+    latestAvailableKind(rounds[0])
+  )
+  const [subject, setSubject] = useState("")
+  const [body, setBody] = useState("")
+  const [preview, setPreview] = useState<
+    | { kind: "loading" }
+    | { kind: "ready"; data: DispatchPreview }
+    | { kind: "error"; message: string }
+  >({ kind: "loading" })
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [mode, setMode] = useState<"test" | "live">("test")
+  const [testTo, setTestTo] = useState(adminEmail)
+  const [status, setStatus] = useState<SendStatus>({ kind: "idle" })
+  const requestId = useRef(0)
+
+  const isRoundOpened = kind === "round-opened"
+  const content = isRoundOpened
+    ? { subject: subject.trim() || null, body: body.trim() || null }
+    : { subject: null, body: null }
+
+  async function loadPreview() {
+    if (!round) return
+    const id = ++requestId.current
+    setPreview({ kind: "loading" })
+    setStatus({ kind: "idle" })
+    try {
+      const data = await previewRoundDispatch({
+        data: { roundId: round.id, kind, ...content },
+      })
+      if (id !== requestId.current) return
+      setPreview({ kind: "ready", data })
+      setSelectedKeys(new Set(data.recipients.map((entry) => entry.key)))
+    } catch (error) {
+      if (id !== requestId.current) return
+      setPreview({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Ukjent feil",
+      })
+    }
+  }
+
+  useEffect(() => {
+    void loadPreview()
+    // Subject/body edits refresh on demand, not on every keystroke.
+  }, [roundId, kind])
+
+  function changeRound(nextRoundId: string) {
+    setRoundId(nextRoundId)
+    setKind(
+      latestAvailableKind(rounds.find((entry) => entry.id === nextRoundId))
+    )
+  }
+
+  function toggle(key: string) {
+    setSelectedKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const recipients = preview.kind === "ready" ? preview.data.recipients : []
+  const selectedCount = recipients.filter((entry) =>
+    selectedKeys.has(entry.key)
+  ).length
+  const canSend =
+    round !== undefined &&
+    preview.kind === "ready" &&
+    selectedCount > 0 &&
+    (mode === "live" || testTo.trim().length > 0)
+
+  async function handleSend() {
+    if (!round) return
+    if (
+      mode === "live" &&
+      !window.confirm(
+        `Sende «${ROUND_DISPATCH_META[kind].label}» på nytt til ${selectedCount} ${selectedCount === 1 ? "medlem" : "medlemmer"}?`
+      )
+    )
+      return
+
+    setStatus({ kind: "sending" })
+    try {
+      const result = await sendRoundDispatch({
+        data: {
+          roundId: round.id,
+          kind,
+          ...content,
+          recipientKeys: recipients
+            .filter((entry) => selectedKeys.has(entry.key))
+            .map((entry) => entry.key),
+          testTo: mode === "test" ? testTo.trim() : null,
+        },
+      })
+      setStatus({ kind: "done", result })
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Ukjent feil",
+      })
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-(--ledger-line) bg-card">
+      <div className="border-b border-border p-4 sm:p-5">
+        <p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          Repliser
+        </p>
+        <h2 className="mt-1 text-lg">Send en utsending på nytt</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Bygger e-postene fra en runde på nytt med dagens maler og data. Send
+          dem til deg selv først, og deretter til medlemmene.
+        </p>
+      </div>
+
+      {rounds.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground sm:p-5">
+          Ingen runder å replisere ennå.
+        </p>
+      ) : (
+        <div className="space-y-4 p-4 sm:p-5">
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Runde</span>
+            <select
+              className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+              value={roundId}
+              onChange={(event) => changeRound(event.target.value)}
+            >
+              {rounds.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {formatRoundOption(entry)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Utsending</span>
+            <div
+              className="flex flex-wrap gap-2"
+              role="tablist"
+              aria-label="Utsending"
+            >
+              {ROUND_DISPATCH_KINDS.map((entry) => {
+                const isActive = entry === kind
+                return (
+                  <Button
+                    key={entry}
+                    type="button"
+                    size="sm"
+                    variant={isActive ? "default" : "outline"}
+                    role="tab"
+                    aria-selected={isActive}
+                    disabled={
+                      !round || !isRoundDispatchAvailable(entry, round.status)
+                    }
+                    onClick={() => setKind(entry)}
+                  >
+                    {ROUND_DISPATCH_META[entry].label}
+                  </Button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Mottakere: {ROUND_DISPATCH_META[kind].recipients}.
+            </p>
+          </div>
+
+          {isRoundOpened ? (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <label className="block space-y-1">
+                <span className="text-sm font-medium">Emne</span>
+                <input
+                  className="h-9 w-full rounded-md border border-input px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  placeholder="Tomt gir standardemnet"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium">Melding</span>
+                <textarea
+                  className="min-h-32 w-full rounded-md border border-input px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  placeholder="Tomt gir standardteksten. Markdown og {{navn}} støttes."
+                />
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadPreview()}
+              >
+                <RefreshCw className="size-4" aria-hidden="true" />
+                Oppdater forhåndsvisning
+              </Button>
+            </div>
+          ) : null}
+
+          {preview.kind === "loading" ? (
+            <p className="text-sm text-muted-foreground">Henter mottakere …</p>
+          ) : null}
+          {preview.kind === "error" ? (
+            <p className="text-sm text-destructive">
+              Kunne ikke bygge utsendingen: {preview.message}
+            </p>
+          ) : null}
+
+          {preview.kind === "ready" ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start">
+              <div className="min-w-0 space-y-4">
+                <div className="rounded-lg border border-border">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+                    <p className="text-sm font-medium">
+                      Mottakere{" "}
+                      <span className="font-mono text-muted-foreground">
+                        {selectedCount}/{recipients.length}
+                      </span>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        type="button"
+                        onClick={() =>
+                          setSelectedKeys(
+                            new Set(recipients.map((entry) => entry.key))
+                          )
+                        }
+                      >
+                        Velg alle
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        type="button"
+                        onClick={() => setSelectedKeys(new Set())}
+                      >
+                        Fjern alle
+                      </Button>
+                    </div>
+                  </div>
+                  {recipients.length === 0 ? (
+                    <p className="p-3 text-sm text-muted-foreground">
+                      Ingen mottakere med e-post for denne utsendingen.
+                    </p>
+                  ) : (
+                    <ul className="max-h-72 divide-y divide-border overflow-y-auto">
+                      {recipients.map((entry) => (
+                        <li key={entry.key}>
+                          <label className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/40">
+                            <input
+                              type="checkbox"
+                              checked={selectedKeys.has(entry.key)}
+                              onChange={() => toggle(entry.key)}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">
+                                {entry.name}
+                              </span>
+                              <span className="block truncate font-mono text-xs text-muted-foreground">
+                                {entry.email}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <fieldset className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                  <legend className="px-1 text-sm font-medium">Send til</legend>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="dispatch-mode"
+                      className="mt-1"
+                      checked={mode === "test"}
+                      onChange={() => setMode("test")}
+                    />
+                    <span>
+                      Meg (test) – alle valgte e-poster sendes til én adresse,
+                      med original mottaker nederst.
+                    </span>
+                  </label>
+                  {mode === "test" ? (
+                    <input
+                      className="h-9 w-full rounded-md border border-input px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                      type="email"
+                      value={testTo}
+                      onChange={(event) => setTestTo(event.target.value)}
+                      placeholder="deg@example.com"
+                    />
+                  ) : null}
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="dispatch-mode"
+                      className="mt-1"
+                      checked={mode === "live"}
+                      onChange={() => setMode("live")}
+                    />
+                    <span>Medlemmene – ekte utsending på nytt.</span>
+                  </label>
+                </fieldset>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCount}{" "}
+                    {selectedCount === 1 ? "e-post" : "e-poster"}
+                    {mode === "test" ? ` til ${testTo.trim() || "…"}` : ""}.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={handleSend}
+                    loading={status.kind === "sending"}
+                    disabled={!canSend}
+                  >
+                    <Repeat className="size-4" aria-hidden="true" />
+                    {mode === "test"
+                      ? "Send test"
+                      : `Send til ${selectedCount}`}
+                  </Button>
+                </div>
+
+                <SendResultFeedback status={status} />
+              </div>
+
+              {preview.data.preview ? (
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Emne: </span>
+                    <span className="font-medium">
+                      {preview.data.preview.subject}
+                    </span>
+                  </p>
+                  <div className="overflow-hidden rounded-lg border border-border bg-white">
+                    <iframe
+                      title={`Forhåndsvisning til ${preview.data.preview.to}`}
+                      srcDoc={preview.data.preview.html}
+                      sandbox=""
+                      className="h-96 w-full"
+                    />
+                  </div>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    Viser e-posten til {preview.data.preview.to}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function BroadcastSection({ members }: { members: Array<Member> }) {
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
@@ -353,15 +795,7 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
           .map((member) => member.id)
       )
   )
-  const [status, setStatus] = useState<
-    | { kind: "idle" }
-    | { kind: "sending" }
-    | {
-        kind: "done"
-        result: Awaited<ReturnType<typeof sendBroadcastEmail>>
-      }
-    | { kind: "error"; message: string }
-  >({ kind: "idle" })
+  const [status, setStatus] = useState<SendStatus>({ kind: "idle" })
 
   const selectedCount = selectedIds.size
   const canSend =
@@ -585,21 +1019,13 @@ function BroadcastSection({ members }: { members: Array<Member> }) {
           </Button>
         </div>
 
-        <BroadcastFeedback status={status} />
+        <SendResultFeedback status={status} />
       </div>
     </section>
   )
 }
 
-function BroadcastFeedback({
-  status,
-}: {
-  status:
-    | { kind: "idle" }
-    | { kind: "sending" }
-    | { kind: "done"; result: Awaited<ReturnType<typeof sendBroadcastEmail>> }
-    | { kind: "error"; message: string }
-}) {
+function SendResultFeedback({ status }: { status: SendStatus }) {
   if (status.kind === "idle" || status.kind === "sending") return null
 
   if (status.kind === "error") {
